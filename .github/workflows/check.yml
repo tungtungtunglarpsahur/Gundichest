@@ -1,0 +1,57 @@
+# Two checks on every push to main:
+#  - tests:  the API tests against a throwaway Postgres
+#  - live:   waits for Vercel to deploy the commit, then opens the real site and plays one trade
+#            between two throwaway players (tools/livecheck.mjs). They are removed again at the end.
+name: Check
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gc_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: node tools/build.mjs
+      - run: npm test
+        env:
+          GC_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/gc_test
+
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/livecheck.mjs
+        env:
+          GC_BASE_URL: ${{ vars.GC_BASE_URL || 'https://gundichest.vercel.app' }}
+          GC_EXPECT_COMMIT: ${{ github.sha }}

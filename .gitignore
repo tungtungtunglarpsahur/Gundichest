@@ -5,4 +5,7 @@ dist/
 .env.*
 *.log
 .DS_Store
-tests/.tmp/
+__pycache__/
+# written by the build
+public/index.html
+public/favicon.svg

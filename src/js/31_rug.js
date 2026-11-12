@@ -200,8 +200,8 @@ Games.register({
         if (st.scheduled) { st.scheduled = 0; Sfx.click(); }
         else {
           var v = bet.get();
-          if (Store.s.coins <= 0) { Sfx.deny(); UI.toast('No coins yet. Sell items from your inventory.'); }
-          else if (v > Store.s.coins) { Sfx.deny(); UI.toast('Not enough coins. Your balance is ' + fmt(Store.s.coins) + '.'); bet.set(Store.s.coins); }
+          if (Store.avail() <= 0) { Sfx.deny(); UI.toast(Store.held.coins ? 'Your coins are in a trade offer right now.' : 'No coins yet. Sell items from your inventory.'); }
+          else if (v > Store.avail()) { Sfx.deny(); UI.toast('Not enough coins. Your balance is ' + fmt(Store.avail()) + '.'); bet.set(Store.avail()); }
           else { st.scheduled = v; Sfx.click(); UI.toast('Bet of ' + fmt(v) + ' set for the next round'); }
         }
       }

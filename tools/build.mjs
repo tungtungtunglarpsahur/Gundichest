@@ -25,9 +25,15 @@ const files = readdirSync(join(ROOT, 'src/js')).filter((f) => f.endsWith('.js'))
 let js = "(function(){\n'use strict';\n" + files.map((f) => `// ---- ${f}\n${read('src/js/' + f)}`).join('\n') + '\n})();\n';
 if (/<\/script/i.test(js)) throw new Error('script close tag inside the JS bundle');
 
+// The logo is drawn once (src/logo.svg) and used as the favicon and, as a symbol, inside the page.
+const logo = read('src/logo.svg').trim();
+const sprite = '<svg width="0" height="0" style="position:absolute" aria-hidden="true">' +
+  logo.replace(/^<svg[^>]*>/, '<symbol id="gmark" viewBox="0 0 100 100">').replace(/<\/svg>$/, '</symbol>') + '</svg>';
+
 const ASSETS = ['model.json', 'model.bin', 'albedo.webp', 'normal.jpg', 'mat.jpg', 'ao.jpg', 'three.min.js'];
-const head = [];
+const head = [], meta = [];
 if (single) {
+  meta.push(`<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,${Buffer.from(logo).toString('base64')}">`);
   head.push(`<script>window.__GC_BUILD=${JSON.stringify({ mode: 'single' })};</script>`);
   head.push(`<script type="application/json" id="asset-manifest">${read('public/assets/model.json')}</script>`);
   head.push(`<script type="text/plain" id="asset-model">${b64('public/assets/model.bin')}</script>`);
@@ -38,11 +44,32 @@ if (single) {
   if (/<\/script/i.test(three)) throw new Error('script close tag inside three.min.js');
   head.push(`<script>${three}</script>`);
 } else {
+  writeFileSync(join(ROOT, 'public/favicon.svg'), logo + '\n');
+  // Link previews want a full address for the image; on Vercel the build knows the site's own.
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || '';
+  const og = (host ? 'https://' + host : '') + '/og.png';
+  meta.push(
+    '<link rel="icon" href="/favicon.ico" sizes="48x48">',
+    '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+    '<link rel="apple-touch-icon" href="/apple-touch-icon.png">',
+    '<link rel="manifest" href="/site.webmanifest">',
+    '<meta name="mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-title" content="GundiChest">',
+    '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
+    '<meta property="og:type" content="website">',
+    '<meta property="og:title" content="GundiChest">',
+    '<meta property="og:description" content="Open chests, collect cards and trade them with friends.">',
+    `<meta property="og:image" content="${og}">`,
+    '<meta name="twitter:card" content="summary_large_image">',
+  );
   const v = Object.fromEntries(ASSETS.map((a) => [a, hash('public/assets/' + a)]));
-  head.push(`<script>window.__GC_BUILD=${JSON.stringify({ mode: 'site', assets: 'assets/', api: 'api/rpc', v })};</script>`);
+  const commit = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 12);
+  head.push(`<script>window.__GC_BUILD=${JSON.stringify({ mode: 'site', assets: 'assets/', api: 'api/rpc', commit, v })};</script>`);
 }
-const html = tpl.replace('/*{{CSS}}*/', () => css).replace('/*{{JS}}*/', () => js).replace('<!--{{ASSETS}}-->', () => head.join('\n'));
-for (const mark of ['/*{{CSS}}*/', '/*{{JS}}*/', '<!--{{ASSETS}}-->', '/*{{FONTS}}*/']) if (html.includes(mark)) throw new Error('placeholder left in the page: ' + mark);
+const html = tpl.replace('/*{{CSS}}*/', () => css).replace('/*{{JS}}*/', () => js).replace('<!--{{ASSETS}}-->', () => head.join('\n'))
+  .replace('<!--{{HEAD}}-->', () => meta.join('\n')).replace('<!--{{LOGO}}-->', () => sprite);
+for (const mark of ['/*{{CSS}}*/', '/*{{JS}}*/', '<!--{{ASSETS}}-->', '/*{{FONTS}}*/', '<!--{{HEAD}}-->', '<!--{{LOGO}}-->']) if (html.includes(mark)) throw new Error('placeholder left in the page: ' + mark);
 
 const out = single ? 'dist/gundichest.html' : 'public/index.html';
 if (!existsSync(join(ROOT, dirname(out)))) mkdirSync(join(ROOT, dirname(out)), { recursive: true });

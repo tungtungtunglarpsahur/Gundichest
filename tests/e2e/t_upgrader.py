@@ -1,0 +1,86 @@
+"""The Upgrader through the real page: choosing cards, the chance shown, a win, a miss, and an interrupted spin."""
+import sys, os
+sys.path.insert(0, os.path.dirname(__file__))
+from harness import *
+from playwright.sync_api import sync_playwright
+
+c = Checks(); errs = []
+G = 'window.__GC'
+inv = lambda pg: pg.evaluate(G + '.store.s.inv')
+# the roll comes from crypto.getRandomValues: 0 always wins, the largest value always misses
+force = lambda pg, v: pg.evaluate("v => { crypto.getRandomValues = a => { a[0] = v; return a; }; }", v)
+
+with sync_playwright() as p:
+    b = launch(p)
+    U = make_user({'coins': 0, 'inv': {'i17': 12, 'i14': 1, 'i7': 1, 'i3': 1, 'i0': 1}})
+    pg = open_app(page_for(b, U, errors=errs))
+    pg.evaluate(G + ".store.set('fast', true)")
+    pg.click('#nav button[data-go=games]'); pg.click('.game-tabs button[data-g=up]'); pg.wait_for_selector('#upGo')
+    c.ok(pg.is_disabled('#upGo'), 'nothing to spin before cards are chosen')
+    c.eq(pg.inner_text('#upSub'), 'pick your card', 'the ring says what to do first')
+    # --- choose the card to put in
+    pg.click('#upIn'); pg.wait_for_selector('.sheet.on')
+    names = pg.evaluate("[...document.querySelectorAll('.sheet.on button[data-id]')].map(b => b.dataset.id)")
+    c.eq(names, ['i3', 'i7', 'i14', 'i17'], 'own cards are offered, without the legendary (nothing is above it)')
+    pg.click('.sheet.on button[data-id=i17]'); pg.wait_for_timeout(450)
+    c.eq(pg.inner_text('#upSub'), 'pick a target', 'then asks for the target')
+    # --- choose the target: only cards worth more, each with its chance
+    pg.click('#upOut'); pg.wait_for_selector('.sheet.on')
+    rows = pg.evaluate("[...document.querySelectorAll('.sheet.on button[data-id]')].map(b => [b.dataset.id, b.querySelector('.up-odds').textContent])")
+    c.eq(len(rows), 17, 'every card above a common can be the target (17)')
+    c.eq(dict(rows)['i14'], '38%', 'common to uncommon: 95% of 10/25 = 38%')
+    c.eq(dict(rows)['i7'], '9.5%', 'common to rare: 9.5%')
+    c.eq(dict(rows)['i0'], '0.095%', 'common to legendary: 0.095%')
+    pg.click('.sheet.on button[data-id=i7]'); pg.wait_for_timeout(450)
+    c.eq(pg.inner_text('#upPct'), '9.5%', 'the ring shows the chance')
+    # --- more copies raise the chance, up to 90%
+    for _ in range(4): pg.click('#upMore')
+    c.eq([pg.inner_text('#upN'), pg.inner_text('#upPct')], ['5', '47.5%'], 'five commons for a rare: 47.5%')
+    for _ in range(6): pg.click('#upMore', force=True)
+    c.eq([pg.inner_text('#upN'), pg.inner_text('#upPct')], ['10', '90%'], 'it stops at the copy that reaches 90%')
+    c.ok(pg.is_disabled('#upMore'), 'more copies would be wasted, so + is off')
+    arc = pg.evaluate("document.querySelector('#upArc').getAttribute('stroke-dasharray').split(' ').map(Number)")
+    c.ok(abs(arc[0] / arc[1] - 0.9) < 0.002, 'the green arc covers 90% of the ring', arc)
+    shot(pg, 'up_ready')
+    # --- a win
+    force(pg, 0)
+    pg.click('#upGo')
+    c.eq(inv(pg).get('i17'), 2, 'the ten commons are gone the moment the spin starts')
+    c.eq(inv(pg).get('i7'), 1, 'the target is not handed out before the spin ends')
+    pg.wait_for_function("document.querySelector('#upPct').textContent === 'WIN'", timeout=15000)
+    shot(pg, 'up_win')
+    c.eq(inv(pg).get('i7'), 2, 'a win adds the target card')
+    c.eq(pg.evaluate(G + '.store.s.stats.upWon'), 1, 'and counts as won')
+    c.ok('Upgraded to' in pg.inner_text('#toasts'), 'with a note')
+    pg.wait_for_function("!document.querySelector('#upGo').disabled || document.querySelector('#upGo').textContent.indexOf('Spinning') < 0", timeout=8000)
+    pg.wait_for_timeout(1700)
+    # --- a miss: rare for an epic
+    pg.evaluate(G + ".up.set('i7', 2, 'i3')")
+    c.eq(pg.inner_text('#upPct'), '12.7%', 'two rares for an epic: 12.7%')
+    force(pg, 4294967295)
+    pg.click('#upGo')
+    pg.wait_for_function("document.querySelector('#upPct').textContent === 'MISS'", timeout=15000)
+    shot(pg, 'up_miss')
+    c.eq([inv(pg).get('i7'), inv(pg).get('i3')], [None, 1], 'a miss takes the cards and gives nothing')
+    c.eq([pg.evaluate(G + '.store.s.stats.upTried'), pg.evaluate(G + '.store.s.stats.upWon')], [2, 1], 'tries and wins are counted')
+    pg.wait_for_timeout(1700)
+    c.eq(pg.inner_text('#upWon'), '1 / 2', 'the page shows 1 of 2 won')
+    # --- the page is closed in the middle of a winning spin: the card is handed out on the next visit
+    pg.evaluate(G + ".store.set('fast', false)")
+    pg.evaluate(G + ".up.set('i17', 2, 'i14')")
+    force(pg, 0)
+    pg.click('#upGo'); pg.wait_for_timeout(300)
+    c.eq(pg.evaluate(G + '.store.s.upWin'), 'i14', 'a rolled win is noted before the spin ends')
+    pg.evaluate(G + '.store.saveNow()')
+    pg.reload(); pg.wait_for_function(G + ' && ' + G + '.ready === true', timeout=120000); pg.evaluate(G + '.chest.stop()')
+    wait_until(lambda: inv(pg).get('i14') == 2, 6)
+    c.eq([inv(pg).get('i14'), inv(pg).get('i17')], [2, None], 'after a reload the won card is there and the stake is gone')
+    c.ok('came through' in pg.inner_text('#toasts'), 'with a note about it')
+    c.eq(pg.evaluate(G + '.store.s.upWin'), None, 'and it is handed out only once')
+    pg.evaluate(G + '.net.syncNow()')
+    c.eq(rpc('me', {'rev': -1}, U['token'])[1]['state']['inv'], {'i0': 1, 'i3': 1, 'i14': 2}, 'the server has the same cards')
+    # --- the chance formula itself
+    ch = pg.evaluate("(() => { const f = window.__GC.upgrader.chance; return [f(10, 25), f(1500, 10000), f(100, 100), f(5000, 100), f(0, 100), f(10, 0)]; })()")
+    c.eq([round(x, 6) for x in ch], [0.38, 0.1425, 0.9, 0.9, 0, 0], 'chance = 95% of value in / value out, capped at 90%')
+    b.close()
+c.done(errs)

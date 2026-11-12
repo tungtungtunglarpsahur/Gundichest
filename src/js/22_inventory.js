@@ -10,7 +10,8 @@ var Inventory = (function () {
   function sellMany(howMany, label) {
     var inv = Store.s.inv, plan = [], gain = 0, cnt = 0;
     Object.keys(inv).forEach(function (id) {
-      var n = Math.min(inv[id], Math.max(0, howMany(ITEM_BY_ID[id], inv[id]) | 0));
+      var free = Store.free(id);                                   // copies in a trade offer stay where they are
+      var n = Math.min(free, Math.max(0, howMany(ITEM_BY_ID[id], free) | 0));
       if (n > 0) { plan.push([id, n]); cnt += n; gain += n * ITEM_BY_ID[id].sell; }
     });
     if (!cnt) { UI.toast('Nothing to sell'); Sfx.deny(); return; }
@@ -24,7 +25,7 @@ var Inventory = (function () {
   function render(live) {
     if (!root) return;
     dirty = false;
-    var key = filter + '|' + JSON.stringify(Store.s.inv) + '|' + Object.keys(Store.s.found).length;
+    var key = filter + '|' + JSON.stringify(Store.s.inv) + '|' + Object.keys(Store.s.found).length + '|' + JSON.stringify(Store.held.items);
     if (live && key === shownKey) return;          // e.g. a pull that auto opening sold straight away
     shownKey = key;
     root.classList.toggle('quiet', !!live);
@@ -48,11 +49,12 @@ var Inventory = (function () {
       var n = inv[it.id]; if (!n) return;
       if (filter !== 'all' && it.rarity !== filter) return;
       shown++;
-      var R = RARITY[it.rarity], last = it.name.split(' ').pop();
+      var R = RARITY[it.rarity], last = it.name.split(' ').pop(), free = Store.free(it.id), held = n - free;
       html += '<div class="inv-item r-' + it.rarity + '" style="animation-delay:' + Math.min(shown * 18, 240) + 'ms"><div class="av">' + esc(last.charAt(0)) + '</div>' +
-        '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + R.name + '</b><span>' + fmtPct(it.chance) + '</span><span class="cnt">×' + n + '</span></div></div>' +
-        '<div class="inv-acts"><button class="btn sm" type="button" data-sell="' + it.id + '" data-n="1"><span class="coin-ic sm"></span>' + fmtShort(it.sell) + '</button>' +
-        (n > 1 ? '<button class="btn sm gold" type="button" data-sell="' + it.id + '" data-n="' + n + '">All ' + fmtShort(it.sell * n) + '</button>' : '') + '</div></div>';
+        '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + R.name + '</b><span>' + fmtPct(it.chance) + '</span><span class="cnt">×' + n + '</span>' +
+        (held ? '<span class="held">' + held + ' in a trade</span>' : '') + '</div></div>' +
+        '<div class="inv-acts"><button class="btn sm" type="button" data-sell="' + it.id + '" data-n="1"' + (free ? '' : ' disabled') + '><span class="coin-ic sm"></span>' + fmtShort(it.sell) + '</button>' +
+        (free > 1 ? '<button class="btn sm gold" type="button" data-sell="' + it.id + '" data-n="' + free + '">All ' + fmtShort(it.sell * free) + '</button>' : '') + '</div></div>';
     });
     if (!shown) html += '<div class="empty"><b>No ' + RARITY[filter].name.toLowerCase() + ' items</b>Try another filter.</div>';
     html += '</div><div class="note">Selling is instant and final.</div></div>';

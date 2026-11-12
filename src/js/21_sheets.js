@@ -65,13 +65,63 @@ var SettingsSheet = (function () {
     if (control) r.appendChild(control);
     return r;
   }
+  // Small sheet with password fields: fields = [[id, label, autocomplete]], go(values) returns a promise.
+  function passSheet(title, text, fields, okLabel, danger, go) {
+    UI.sheet(title, function (body, close) {
+      body.appendChild(el('p', 'sub', text));
+      var form = el('form', 'pw-form'); form.setAttribute('novalidate', '');
+      fields.forEach(function (f) {
+        form.appendChild(el('label', 'field', '<span>' + esc(f[1]) + '</span><input id="' + f[0] + '" type="password" autocomplete="' + f[2] + '" maxlength="100">'));
+      });
+      var err = el('div', 'auth-err'); err.setAttribute('role', 'alert');
+      var ok = el('button', 'btn big block ' + (danger ? 'red' : 'gold'), esc(okLabel)); ok.type = 'submit';
+      form.appendChild(err); form.appendChild(ok); body.appendChild(form);
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        if (ok.disabled) return;
+        var vals = fields.map(function (f) { return $('#' + f[0], form).value; });
+        if (vals.some(function (v) { return !v; })) { err.textContent = 'Fill in every field.'; err.classList.add('on'); return; }
+        ok.disabled = true; err.classList.remove('on');
+        go(vals).then(function () { close(); }, function (e) { ok.disabled = false; err.textContent = e.message || 'That did not work.'; err.classList.add('on'); });
+      });
+    });
+  }
+  function accountRows(body, close) {
+    if (!Net.enabled) return;
+    var u = Net.user;
+    if (!u || GC.mode !== 'account') {
+      var login = el('button', 'btn sm gold', 'Log in'); login.type = 'button';
+      onTap(login, function () { location.reload(); });
+      body.appendChild(row('No account', 'You are playing offline on this device. Trading needs an account.', login));
+      return;
+    }
+    var out = el('button', 'btn sm', 'Log out'); out.type = 'button'; out.id = 'setLogout';
+    onTap(out, function () { out.disabled = true; out.textContent = 'Saving\u2026'; Net.logout(); });
+    body.appendChild(row('Logged in as ' + u.name, Net.online ? 'Your progress is saved to your account.' : 'Offline right now. Progress is saved once the server is back.', out));
+    var more = el('div', 'set-row acct-more');
+    var pw = el('button', 'btn sm', 'Change password'), del = el('button', 'btn sm', 'Delete account'); pw.type = del.type = 'button';
+    onTap(pw, function () {
+      Sfx.click();
+      passSheet('Change password', 'Other devices are logged out and need the new password.', [['pwOld', 'Current password', 'current-password'], ['pwNew', 'New password (at least 6 characters)', 'new-password']], 'Change password', false, function (v) {
+        return Net.call('account.password', { pass: v[0], next: v[1] }).then(function () { UI.toast('Password changed', 'win'); });
+      });
+    });
+    onTap(del, function () {
+      Sfx.click();
+      passSheet('Delete account', 'This removes ' + esc(u.name) + ' with all cards, coins and trades for good. Enter your password to confirm.', [['pwDel', 'Password', 'current-password']], 'Delete my account', true, function (v) {
+        return Net.deleteAccount(v[0]);
+      });
+    });
+    more.appendChild(pw); more.appendChild(del); body.appendChild(more);
+  }
   function open() {
     UI.sheet('Settings', function (body, close) {
       var S = Store.s.settings;
+      accountRows(body, close);
       body.appendChild(row('Effects quality', 'Lower it if the chest stutters.', seg([['low', 'Low'], ['mid', 'Mid'], ['high', 'High']], Chest3D.quality, function (q) {
         Store.set('quality', q); Chest3D.setQuality(q);
       })));
-      body.appendChild(row('Sound', 'Chest, coins and game effects.', toggle(S.sound, function (on) { Store.set('sound', on); Sfx.setEnabled(on); if (on) Sfx.unlock(); })));
+      body.appendChild(row('Sound', 'Chest, coins and game effects.', toggle(S.snd, function (on) { Store.set('snd', on); if (on) Sfx.unlock(); })));
       body.appendChild(row('Fast opening', 'Shorter chest animation.', toggle(S.fast, function (on) { Store.set('fast', on); })));
       if (navigator.vibrate) body.appendChild(row('Vibration', '', toggle(S.haptics, function (on) { Store.set('haptics', on); })));
       var fx = el('div', 'set-row'); fx.style.display = 'block';
@@ -97,10 +147,13 @@ var SettingsSheet = (function () {
       var reset = el('button', 'btn red sm', 'Reset progress'); reset.type = 'button';
       onTap(reset, function () {
         UI.confirm('Reset everything?', 'Your coins, inventory and stats are deleted. This cannot be undone.', 'Reset', true).then(function (ok) {
-          if (ok) { var q = Store.s.settings.quality, snd = Store.s.settings.sound; Store.reset(); Store.set('quality', q); Store.set('sound', snd); UI.toast('Progress reset'); close(); }
+          if (!ok) return;
+          if (Store.held.coins || Object.keys(Store.held.items).length) { UI.toast('Leave your open trade first.'); return; }
+          if (ChestView.auto) ChestView.setAuto(false);
+          Store.reset(); UI.toast('Progress reset'); close();
         });
       });
-      body.appendChild(row('Start over', 'Saved in this browser only.', reset));
+      body.appendChild(row('Start over', Net.user && GC.mode === 'account' ? 'Empties the game of your account.' : 'Saved in this browser only.', reset));
       body.appendChild(el('div', 'note', 'GundiChest uses play coins only. Nothing here costs or pays real money.'));
     });
   }

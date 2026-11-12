@@ -77,7 +77,25 @@ var UI = (function () {
       $$('#nav button').forEach(function (b) { onTap(b, function () { Sfx.tab(); go(b.dataset.go); }); });
       onTap($('#coinPill'), function () { Sfx.click(); go('inv'); });
       shownCoins = Store.s.coins; $('#coinAmt').textContent = fmtShort(shownCoins); renderBadge();
-      Store.on(function (what) { if (what === 'coins') renderCoins(); if (what === 'inv') renderBadge(); });
+      // sound switch in the top bar: off until the player turns it on
+      var sb = $('#btnSound');
+      var paintSound = function () {
+        var on = !!Store.s.settings.snd;
+        sb.classList.toggle('on', on); sb.setAttribute('aria-pressed', on ? 'true' : 'false'); sb.setAttribute('aria-label', on ? 'Sound is on' : 'Sound is off');
+        Sfx.setEnabled(on);
+      };
+      onTap(sb, function () {
+        var on = !Store.s.settings.snd;
+        Store.set('snd', on);
+        if (on) { Sfx.unlock(); Sfx.click(); }
+        toast(on ? 'Sound on' : 'Sound off', '', 1100);
+      });
+      paintSound();
+      Store.on(function (what) {
+        if (what === 'coins') renderCoins();
+        if (what === 'inv') renderBadge();
+        if (what === 'settings') paintSound();
+      });
     }
   };
 })();

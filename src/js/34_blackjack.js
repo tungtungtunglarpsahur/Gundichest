@@ -57,8 +57,8 @@ Games.register({
     function paint() {
       var acts = $$('#bjActs .btn', pane), h = st.hands[st.active], playing = st.phase === 'player' && !st.busy;
       acts[0].disabled = !playing; acts[1].disabled = !playing;
-      acts[2].disabled = !(playing && h && h.cards.length === 2 && Store.s.coins >= h.bet);
-      acts[3].disabled = !(playing && h && st.hands.length === 1 && h.cards.length === 2 && h.cards[0].r === h.cards[1].r && Store.s.coins >= h.bet);
+      acts[2].disabled = !(playing && h && h.cards.length === 2 && Store.avail() >= h.bet);
+      acts[3].disabled = !(playing && h && st.hands.length === 1 && h.cards.length === 2 && h.cards[0].r === h.cards[1].r && Store.avail() >= h.bet);
       $('#bjDeal', pane).disabled = st.phase !== 'idle';
       $('#bjDeal', pane).style.display = st.phase === 'idle' ? '' : 'none';
       $('#bjActs', pane).style.display = st.phase === 'idle' ? 'none' : '';

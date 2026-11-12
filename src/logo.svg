@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <radialGradient id="gm-bg" cx="50%" cy="36%" r="78%">
+      <stop offset="0" stop-color="#3b2d66"/>
+      <stop offset=".5" stop-color="#1b1531"/>
+      <stop offset="1" stop-color="#0a0811"/>
+    </radialGradient>
+    <radialGradient id="gm-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffc531" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#ffc531" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gm-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff58a"/>
+      <stop offset=".46" stop-color="#ffd638"/>
+      <stop offset="1" stop-color="#f59c0b"/>
+    </linearGradient>
+    <path id="gm-g" d="M34 14H66A17 17 0 0 1 83 31V36.500A2.500 2.500 0 0 1 80.500 39H66A2 2 0 0 1 64 37A4 4 0 0 0 60 33H41A5 5 0 0 0 36 38V62A5 5 0 0 0 41 67H46A3 3 0 0 0 49 64V50A3 3 0 0 1 52 47H80.500A2.500 2.500 0 0 1 83 49.500V69A17 17 0 0 1 66 86H34A17 17 0 0 1 17 69V31A17 17 0 0 1 34 14Z"/>
+    <clipPath id="gm-clip"><use href="#gm-g"/></clipPath>
+    <clipPath id="gm-under"><path clip-rule="evenodd" d="M-20 -20H120V120H-20ZM33.500 30.500H66.500V36.500H90V49.500H51.500V69.500H33.500Z"/></clipPath>
+  </defs>
+  <rect width="100" height="100" rx="23" fill="url(#gm-bg)"/>
+  <rect x="1.25" y="1.25" width="97.500" height="97.500" rx="21.750" fill="none" stroke="#fff" stroke-opacity=".09" stroke-width="1.500"/>
+  <circle cx="50" cy="50" r="46" fill="url(#gm-glow)"/>
+  <g transform="translate(50 50) skewX(-8) translate(-50 -51.500)">
+    <g clip-path="url(#gm-under)"><use href="#gm-g" y="6" fill="#8a5200" stroke="#1c1004" stroke-width="4.500" stroke-linejoin="round"/></g>
+    <use href="#gm-g" fill="url(#gm-gold)" stroke="#1c1004" stroke-width="4.500" stroke-linejoin="round" paint-order="stroke"/>
+    <g clip-path="url(#gm-clip)">
+      <rect x="10" y="14" width="80" height="6.500" fill="#fff" opacity=".5"/>
+      <rect x="45" y="47" width="42" height="4.500" fill="#fff" opacity=".4"/>
+      <rect x="10" y="78" width="80" height="8" fill="#b96a00" opacity=".4"/>
+    </g>
+    <path d="M66 55.500a5.400 5.400 0 0 1 3 9.900l1.900 9.600h-9.800l1.900-9.600a5.400 5.400 0 0 1 3-9.900Z" fill="#1c1004"/>
+  </g>
+</svg>

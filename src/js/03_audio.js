@@ -1,7 +1,8 @@
 // Tiny WebAudio synth: every sound is generated, nothing is downloaded ------------------------------
 var Sfx = (function () {
-  var ctx = null, master = null, noiseBuf = null, enabled = true;
+  var ctx = null, master = null, noiseBuf = null, enabled = false;
   function ensure() {
+    if (!enabled) return false;          // sound is off: no audio context at all, so music from another app keeps playing
     if (ctx) { if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} } return true; }
     try {
       var AC = window.AudioContext || window.webkitAudioContext;
@@ -56,7 +57,11 @@ var Sfx = (function () {
   var N = function (semi) { return 261.63 * Math.pow(2, semi / 12); };       // semitones from middle C
   var api = {
     unlock: function () { ensure(); },
-    setEnabled: function (on) { enabled = !!on; if (master) master.gain.value = enabled ? 0.55 : 0; },
+    setEnabled: function (on) {
+      enabled = !!on;
+      if (master) master.gain.value = enabled ? 0.55 : 0;
+      if (ctx && !enabled && ctx.state === 'running') { try { ctx.suspend(); } catch (e) {} }
+    },
     click: function () { ensure(); tone(660, 0.05, { type: 'triangle', vol: 0.08 }); noise(0.03, { freq: 3200, vol: 0.04 }); },
     tab: function () { ensure(); tone(520, 0.06, { type: 'sine', vol: 0.07, to: 760 }); },
     deny: function () { ensure(); tone(180, 0.14, { type: 'square', vol: 0.07, to: 120 }); },

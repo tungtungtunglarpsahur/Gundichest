@@ -6,6 +6,7 @@ var Games = (function () {
     chicken: '<svg viewBox="0 0 24 24"><path d="M13 3c1 0 1.800.600 2.100 1.500.700-.300 1.600.100 1.900.900.300.800-.100 1.500-.700 1.900C18.500 8.400 20 10.700 20 13.500 20 17.600 16.600 20 12.500 20c-.400 0-.800 0-1.200-.100L11 22H9.500l.300-2.400C7 18.700 5 16.300 5 13.500c0-1 .200-1.900.600-2.700L3 10l2.500-1.500C6.800 6.500 9 5.200 11.300 5 11.300 3.900 12 3 13 3zm-2.500 6a1.200 1.200 0 1 0 0 2.400 1.200 1.200 0 0 0 0-2.400z"/></svg>',
     mines: '<svg viewBox="0 0 24 24"><circle cx="11" cy="14" r="7"/><path d="M15.500 8.500l2-2 1.500 1.500-2 2zM19 3l.700 1.800L21.500 5.500l-1.800.700L19 8l-.700-1.800L16.500 5.500l1.800-.700z"/></svg>',
     bj: '<svg viewBox="0 0 24 24"><path d="M5 3.500h9A1.500 1.500 0 0 1 15.500 5v12A1.500 1.500 0 0 1 14 18.500H5A1.500 1.500 0 0 1 3.500 17V5A1.500 1.500 0 0 1 5 3.500zm4.500 4.200c-1.700 1.600-3 2.700-3 4.100 0 1 .800 1.700 1.700 1.700.500 0 1-.200 1.300-.600V14h.0v.500H8.500v1h3v-1h-1v-1.600c.300.400.800.600 1.300.600.900 0 1.700-.700 1.700-1.700 0-1.400-1.300-2.500-3-4.100z"/><path d="M17 6.200l2.700.700a1.500 1.500 0 0 1 1.100 1.800l-2.900 11.200a1.500 1.500 0 0 1-1.800 1.100L9.500 19.500H14A3 3 0 0 0 17 16.500z"/></svg>',
+    up: '<svg viewBox="0 0 24 24"><path d="M12 2.500l7.500 7.500h-4.500v5.500H9V10H4.500z"/><path d="M9 17.500h6V20H9z"/></svg>',
     flip: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6.500v11M9.500 9h3.700a1.800 1.800 0 0 1 0 3.600H10.700a1.800 1.800 0 0 0 0 3.600h3.800" fill="none" stroke="#0b0a10" stroke-width="1.600" stroke-linecap="round"/></svg>'
   };
   function show(id) {
@@ -28,18 +29,20 @@ var Games = (function () {
       '<div class="bet-in"><span class="coin-ic"></span><input type="text" inputmode="numeric" autocomplete="off" id="bet-' + key + '" aria-label="Bet amount">' +
       '<button type="button" data-a="half">½</button><button type="button" data-a="dbl">2×</button><button type="button" data-a="max">MAX</button></div>';
     var input = $('input', wrap), bal = $('[data-bal]', wrap);
-    function paint() { input.value = fmt(value); bal.textContent = 'Balance ' + fmt(Store.s.coins); }
-    function set(v) { value = Math.max(1, Math.min(Math.floor(v) || 1, Math.max(1, Store.s.coins))); paint(); }
+    // coins held by a trade offer cannot be bet
+    function balance() { var held = Store.held.coins; return 'Balance ' + fmt(Store.avail()) + (held ? ' (' + fmt(held) + ' in a trade)' : ''); }
+    function paint() { input.value = fmt(value); bal.textContent = balance(); }
+    function set(v) { value = Math.max(1, Math.min(Math.floor(v) || 1, Math.max(1, Store.avail()))); paint(); }
     input.addEventListener('input', function () { var n = parseInt(input.value.replace(/[^0-9]/g, ''), 10); value = Math.max(1, n || 1); });
     input.addEventListener('blur', function () { set(value); });
     input.addEventListener('focus', function () { input.select(); });
     $$('button', wrap).forEach(function (b) {
       onTap(b, function () {
         if (locked) return; Sfx.click();
-        if (b.dataset.a === 'half') set(value / 2); else if (b.dataset.a === 'dbl') set(value * 2); else set(Store.s.coins);
+        if (b.dataset.a === 'half') set(value / 2); else if (b.dataset.a === 'dbl') set(value * 2); else set(Store.avail());
       });
     });
-    Store.on(function (w) { if (w === 'coins') bal.textContent = 'Balance ' + fmt(Store.s.coins); });
+    Store.on(function (w) { if (w === 'coins') bal.textContent = balance(); });
     paint();
     return {
       el: wrap,
@@ -49,8 +52,9 @@ var Games = (function () {
       // Takes the stake from the balance; explains itself when that is not possible.
       take: function () {
         var v = Math.max(1, Math.floor(value));
-        if (Store.s.coins <= 0) { Sfx.deny(); UI.toast('No coins yet. Sell items from your inventory.'); return 0; }
-        if (v > Store.s.coins) { Sfx.deny(); UI.toast('Not enough coins. Your balance is ' + fmt(Store.s.coins) + '.'); set(Store.s.coins); return 0; }
+        var have = Store.avail();
+        if (have <= 0) { Sfx.deny(); UI.toast(Store.held.coins ? 'Your coins are in a trade offer right now.' : 'No coins yet. Sell items from your inventory.'); return 0; }
+        if (v > have) { Sfx.deny(); UI.toast('Not enough coins. Your balance is ' + fmt(have) + '.'); set(have); return 0; }
         return Store.spend(v) ? v : 0;
       }
     };
