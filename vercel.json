@@ -3,6 +3,7 @@
   "framework": null,
   "buildCommand": "node tools/build.mjs && node tools/dbcheck.mjs",
   "outputDirectory": "public",
+  "regions": ["fra1"],
   "headers": [
     {
       "source": "/(.*)",

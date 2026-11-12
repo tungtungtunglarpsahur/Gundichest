@@ -44,6 +44,9 @@ Every build runs `tools/dbcheck.mjs`: it creates the tables if needed and plays 
 throwaway players against the real database, then removes them. A build without a working database fails
 with a message that says what is missing, instead of going live with a login that cannot work.
 
+`vercel.json` runs the function in Frankfurt (`fra1`). Keep the function next to the database: if you
+create the database in another region, change `regions` to match, or every request pays for the distance.
+
 If visitors see a Vercel login instead of the game, switch off **Settings → Deployment Protection →
 Vercel Authentication** for the project.
 

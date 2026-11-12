@@ -51,7 +51,9 @@ try {
     if (page.status !== 200 || !page.text.includes('GundiChest') || !page.text.includes('__GC_BUILD')) fail('Page', `GET / answered HTTP ${page.status}`);
     else note('Page', `index.html ${Math.round(page.text.length / 1024)} KB`);
     for (const [path, type] of [['/assets/model.json', 'json'], ['/assets/three.min.js', 'javascript'], ['/favicon.svg', 'svg'], ['/favicon.ico', 'icon'], ['/apple-touch-icon.png', 'png'], ['/icon-512.png', 'png'], ['/site.webmanifest', 'json'], ['/og.png', 'png']]) {
-      const r = await get(path);
+      // right after a deployment a file can answer 404 for a moment while the address switches over
+      let r = await get(path);
+      for (let again = 0; again < 3 && (r.status !== 200 || !r.type.includes(type)); again++) { await sleep(5000); r = await get(path); }
       if (r.status !== 200 || !r.type.includes(type)) fail('File', `${path} answered HTTP ${r.status} (${r.type})`);
     }
 
