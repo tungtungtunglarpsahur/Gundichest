@@ -425,6 +425,12 @@ var Chest3D = (function () {
       s.userData = { kind: g.kind, base: new T.Color({ purple: '#dc4fe0', orange: '#ff8a2a', blue: '#6f93e6' }[g.kind]) };
       return s;
     });
+    // A hidden combination: the four purple gems on the BACK of the chest can be tapped (turn the chest round to
+    // reach them). A tapped gem stays lit. Whoever opens the next chest with all four lit gets a legendary; with
+    // only the two upper ones lit, an epic. See C.takeSecret.
+    C.backGems = { upper: [], lower: [] };
+    M.gems.forEach(function (g, i) { if (g.kind === 'purple' && g.pos[2] < 0) C.backGems[g.part === 'lid' ? 'upper' : 'lower'].push(i); });
+    C.armed = {};
     var cav = M.cavity, cw = Math.abs(cav.max[0] - cav.min[0]), cd = Math.abs(cav.max[2] - cav.min[2]);
     C.inner = new T.Mesh(new T.PlaneGeometry(cw * 1.02, cd * 1.02), addMat({ side: T.DoubleSide }));
     C.inner.rotation.x = -Math.PI / 2; C.inner.position.set(0, M.seamY - 0.16, (cav.min[2] + cav.max[2]) / 2); yawG.add(C.inner);
@@ -495,18 +501,60 @@ var Chest3D = (function () {
     C.M = M;
     onProgress(0.9, 'scene');
 
-    // pointer rotation
-    var px = 0, py = 0;
-    canvas.addEventListener('pointerdown', function (e) { C.dragging = true; px = e.clientX; py = e.clientY; C.yawVel = 0; try { canvas.setPointerCapture(e.pointerId); } catch (er) {} });
+    // pointer: dragging turns the chest, a short touch that does not move is a tap
+    var px = 0, py = 0, travel = 0, downAt = 0;
+    canvas.addEventListener('pointerdown', function (e) { C.dragging = true; px = e.clientX; py = e.clientY; travel = 0; downAt = performance.now(); C.yawVel = 0; try { canvas.setPointerCapture(e.pointerId); } catch (er) {} });
     canvas.addEventListener('pointermove', function (e) {
       if (!C.dragging) return;
       var dx = e.clientX - px, dy = e.clientY - py; px = e.clientX; py = e.clientY;
+      travel += Math.abs(dx) + Math.abs(dy);
       C.userYaw += dx * 0.009; C.yawVel = dx * 0.009 * 60;
       C.userPitch = clamp(C.userPitch + dy * 0.004, -0.22, 0.42);
       C.lastInput = C.time;
     });
-    var up = function () { C.dragging = false; C.lastInput = C.time; };
+    var up = function (e) {
+      var tapped = C.dragging && e.type === 'pointerup' && travel < 12 && performance.now() - downAt < 500;
+      C.dragging = false; C.lastInput = C.time;
+      if (tapped) { C.yawVel = 0; C.tap(e.clientX, e.clientY); }
+    };
     canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+
+    // Which gem lies under a point of the screen (-1 for none). Only gems that face the viewer count, so a gem on
+    // the far side cannot be hit through the chest.
+    var gv = new T.Vector3(), gn = new T.Vector3(), ge = new T.Vector3(), gq = new T.Quaternion();
+    C.gemAt = function (cx, cy) {
+      var rect = canvas.getBoundingClientRect(), best = -1, bestD = 1e9;
+      C.root.updateMatrixWorld(true); C.camera.updateMatrixWorld(true);
+      for (var i = 0; i < M.gems.length; i++) {
+        var g = M.gems[i], s = C.gemGlows[i];
+        s.getWorldPosition(gv);
+        s.parent.getWorldQuaternion(gq);
+        gn.set(g.axis[0], g.axis[1], g.axis[2]).applyQuaternion(gq);
+        if (gn.dot(ge.copy(C.camera.position).sub(gv).normalize()) < 0.3) continue;
+        // its size on screen: the centre and a point one radius to the side, both projected
+        ge.set(1, 0, 0).applyQuaternion(C.camera.quaternion).multiplyScalar(g.r).add(gv).project(C.camera);
+        gv.project(C.camera);
+        var sx = rect.left + (gv.x * 0.5 + 0.5) * rect.width, sy = rect.top + (0.5 - gv.y * 0.5) * rect.height;
+        var rpx = Math.abs(ge.x - gv.x) * 0.5 * rect.width, d = Math.hypot(cx - sx, cy - sy);
+        if (d < Math.max(24, rpx * 1.6) && d < bestD) { best = i; bestD = d; }
+      }
+      return best;
+    };
+    C.tap = function (cx, cy) {
+      if (C.state !== 'idle') return;
+      var i = C.gemAt(cx, cy);
+      if (i < 0 || (C.backGems.upper.indexOf(i) < 0 && C.backGems.lower.indexOf(i) < 0)) return;
+      if (C.armed[i] != null) delete C.armed[i]; else C.armed[i] = C.time;     // a second tap takes it back
+      if (C.hooks.onGem) C.hooks.onGem(i, C.armed[i] != null, C.secret());
+    };
+    // What the lit gems add up to right now: 'legendary', 'epic' or null.
+    C.secret = function () {
+      var lit = function (i) { return C.armed[i] != null; };
+      var up = C.backGems.upper.length > 0 && C.backGems.upper.every(lit), low = C.backGems.lower.length > 0 && C.backGems.lower.every(lit);
+      return up && low ? 'legendary' : up && !C.backGems.lower.some(lit) ? 'epic' : null;
+    };
+    // Called when a chest is opened: returns what the combination is worth and puts every gem out again.
+    C.takeSecret = function () { var s = C.secret(); C.armed = {}; return s; };
 
     C.setQuality(quality);
     C.resize();
@@ -547,7 +595,7 @@ var Chest3D = (function () {
 
   // ---- camera -----------------------------------------------------------------------------------
   var camState = { push: 0, lift: 0, shake: 0, sx: 0, sy: 0 };
-  var BASE_FOV = 30, FAST_SPEED = 3.2;
+  var BASE_FOV = 30, FAST_SPEED = 6, SKIP_SPEED = 14;        // how much faster the opening plays with Fast open, and after a tap to skip
   C.updateCamera = function () {
     var cam = C.camera, asp = C.fitAspect || cam.aspect;
     var vf = Math.tan(BASE_FOV * Math.PI / 360);
@@ -590,15 +638,15 @@ var Chest3D = (function () {
     return new Promise(function (res) { C.anim.done = res; });
   };
   C.skip = function () {
-    if (C.state === 'opening' && C.anim) { C.anim.seq.speed = 6; }
+    if (C.state === 'opening' && C.anim) { C.anim.seq.skipped = true; C.anim.seq.speed = SKIP_SPEED; }
   };
   C.setFast = function (on) {       // applies to the chest that is opening right now as well
-    if (C.state === 'opening' && C.anim && C.anim.seq.speed < 5) C.anim.seq.speed = on ? FAST_SPEED : 1;
+    if (C.state === 'opening' && C.anim && !C.anim.seq.skipped) C.anim.seq.speed = on ? FAST_SPEED : 1;
   };
   C.reset = function (instant, quick) {
     if (C.state === 'idle' || C.state === 'closing') return Promise.resolve();
     C.state = 'closing';
-    var a = C.anim; a.closeT = 0; a.closeDur = instant ? 0.001 : quick ? 0.18 : 0.42;
+    var a = C.anim; a.closeT = 0; a.closeDur = instant ? 0.001 : quick ? 0.1 : 0.42;
     return new Promise(function (res) { a.closed = res; });
   };
 
@@ -812,6 +860,9 @@ var Chest3D = (function () {
     for (var gi = 0; gi < C.gemGlows.length; gi++) {
       var gs = C.gemGlows[gi]; gs.material.color.copy(gs.userData.base).lerp(color, glowMix);
       gs.material.opacity = sat(0.05 + 0.025 * Math.sin(time * 1.7 + gi) + (glow - 0.3) * 0.2);
+      if (C.armed[gi] != null && idle) {             // a gem that was tapped: lit, with a short flare when it is touched
+        gs.material.opacity = sat(0.62 + 0.1 * Math.sin(time * 5 + gi) + 0.4 * Math.exp(-(time - C.armed[gi]) * 6));
+      }
     }
     // chain fragments
     if (C.fragG.visible) {

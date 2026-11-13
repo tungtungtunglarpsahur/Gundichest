@@ -123,7 +123,12 @@ var Sfx = (function () {
     },
     tick: function (pitch) { ensure(); tone(700 + (pitch || 0) * 40, 0.03, { vol: 0.03, type: 'square' }); },
     card: function () { ensure(); noise(0.07, { freq: 3800, to: 1500, q: 0.8, vol: 0.12 }); },
-    flip: function () { ensure(); for (var i = 0; i < 6; i++) noise(0.05, { when: i * 0.09, freq: 2600 - i * 180, q: 2, vol: 0.07 }); },
+    // the whirr of a turning coin over dur seconds: quick at first, slower while it comes down, a clink where it lands
+    flip: function (dur) {
+      ensure(); dur = dur || 0.55;
+      for (var t = 0, i = 0; t < dur * 0.8 && i < 60; i++) { noise(0.045, { when: t, freq: 2700 - 1300 * (t / dur), q: 2, vol: 0.065 }); t += 0.075 + 0.11 * Math.pow(t / dur, 1.5); }
+      if (dur > 1) { tone(2100, 0.07, { type: 'triangle', vol: 0.09, when: dur * 0.84 }); noise(0.05, { when: dur * 0.84, freq: 4200, q: 3, vol: 0.09 }); tone(2400, 0.05, { type: 'triangle', vol: 0.05, when: dur * 0.985 }); }
+    },
     gem: function (k) { ensure(); tone(N(12 + Math.min(k, 24)), 0.22, { vol: 0.13, type: 'triangle' }); tone(N(24 + Math.min(k, 24)), 0.3, { vol: 0.06, when: 0.03 }); },
     boom: function () { ensure(); noise(0.7, { freq: 900, to: 60, q: 0.5, vol: 0.4, filter: 'lowpass' }); tone(90, 0.6, { type: 'sine', vol: 0.4, to: 28 }); },
     hop: function (k) { ensure(); tone(420 + (k || 0) * 30, 0.09, { vol: 0.1, type: 'square', to: 760 + (k || 0) * 30 }); },

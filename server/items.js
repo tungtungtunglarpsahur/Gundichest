@@ -8,10 +8,10 @@ const RARITIES = {
   uncommon: { tier: 1, sell: 25 },
   common: { tier: 0, sell: 10 },
 };
-// card numbers per rarity: "i0" .. "i24"
+// card numbers per rarity: "i0" .. "i25"
 const BY_RARITY = {
   legendary: [0, 1, 2],
-  epic: [3, 4, 5, 6],
+  epic: [3, 4, 5, 6, 25],
   rare: [7, 8, 9, 10, 11, 12, 13, 21],
   uncommon: [14, 15, 16],
   common: [17, 18, 19, 20, 22, 23, 24],

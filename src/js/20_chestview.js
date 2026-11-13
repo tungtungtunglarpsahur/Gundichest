@@ -64,8 +64,10 @@ var ChestView = (function () {
   // ---- auto opening ---------------------------------------------------------------------------------
   // How long a pull stays on screen before the next chest: rare pulls get more time, a legendary gets its banner.
   function autoPause(item) {
-    var t = RARITY[item.rarity].tier, ms = t >= 4 ? 4800 : t === 3 ? 2200 : t === 2 ? 1100 : 800;
-    return isFast() ? Math.round(ms * 0.5) : ms;
+    var t = RARITY[item.rarity].tier;
+    // Fast open hurries past the everyday cards but still stops for the big ones
+    if (isFast()) return t >= 4 ? 2400 : t === 3 ? 900 : t === 2 ? 320 : 230;
+    return t >= 4 ? 4800 : t === 3 ? 2200 : t === 2 ? 1100 : 800;
   }
   function bar(ms) {            // thin line in the auto row that fills until the next chest
     var b = $('#autoBar'); if (!b) return;
@@ -194,7 +196,7 @@ var ChestView = (function () {
     }
     var sold = pullSold;
     // rise -> turn -> the face fills in -> buttons. Fast open compresses the same steps.
-    var T = fast ? { flip: 170, face: 330, show: 380, ready: 700 } : { flip: 760, face: 1190, show: 1320, ready: 2570 };
+    var T = fast ? { flip: 70, face: 160, show: 190, ready: 380 } : { flip: 760, face: 1190, show: 1320, ready: 2570 };
     var timers = [], faced = false, done = false;
     function face() {                     // the front comes into view
       if (faced || seq !== revealSeq) return; faced = true;
@@ -228,7 +230,8 @@ var ChestView = (function () {
     if (busy) return;
     if (!Chest3D.renderer || Chest3D.state !== 'idle') return;
     busy = true; demo = !!isDemo; revealShown = false; revealReady = false; pullSold = false;
-    current = rollItem(forceRarity);
+    // gems lit on the back of the chest decide this pull (Chest3D.takeSecret); a preview leaves them alone
+    current = rollItem(forceRarity || (isDemo ? null : Chest3D.takeSecret()) || undefined);
     $('#chestUi').classList.add('hide');
     switches(false);
     hideBanner();
@@ -280,6 +283,10 @@ var ChestView = (function () {
       Sfx.tierUp(tier);
       if (idx > 0) { flash(Chest3D.TIER_COLORS[tier], 0.3 + 0.12 * idx, 450); haptic(25 + idx * 20); }
       if (idx === 0 && seq.tier >= 3) Sfx.riser((seq.chainT - 0.3) / seq.speed, seq.tier === 4 ? 1.2 : 0.8);
+    };
+    Chest3D.hooks.onGem = function (i, lit, combo) {
+      if (!fg()) return;
+      if (lit) { Sfx.unlock(); Sfx.gem(combo === 'legendary' ? 14 : combo === 'epic' ? 9 : 4); haptic(combo ? [15, 40, 25] : 12); } else { Sfx.tick(1); haptic(8); }
     };
     Chest3D.hooks.onPhase = function (name, seq) {
       if (name === 'reveal') { showReveal(current); return; }

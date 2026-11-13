@@ -41,13 +41,25 @@ Games.register({
       if (!st.on || st.busy) return;
       st.busy = true; paint();
       var res = rand() < 0.5 ? 'h' : 't';
-      var cur = st.rot, turns = 5 + randInt(3), target = Math.ceil(cur / 360) * 360 + turns * 360 + (res === 't' ? 180 : 0);
-      st.rot = target; Sfx.flip();
-      var dur = reducedMotion ? 300 : 1500;
+      // a high toss: many turns on the way up, slower ones while it comes down, and a small bounce on landing
+      var cur = st.rot, turns = 11 + randInt(4), target = Math.ceil(cur / 360) * 360 + turns * 360 + (res === 't' ? 180 : 0);
+      st.rot = target;
+      var dur = reducedMotion ? 300 : 3400;
+      Sfx.flip(dur / 1000);
       $('#cfMult', pane).innerHTML = 'Flipping…';
       try {
-        coin.animate([{ transform: 'translateY(0) rotateY(' + cur + 'deg)' }, { transform: 'translateY(-78px) rotateY(' + (cur + (target - cur) * 0.55) + 'deg) scale(1.12)', offset: 0.45 }, { transform: 'translateY(0) rotateY(' + target + 'deg)' }], { duration: dur, easing: 'cubic-bezier(.3,.1,.3,1)', fill: 'forwards' });
-        $('#cfShadow', pane).animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.55)', opacity: .45, offset: 0.45 }, { transform: 'scale(1)', opacity: 1 }], { duration: dur, easing: 'ease-in-out' });
+        var span = target - cur, at = function (y, part, sc) { return 'translateY(' + y + 'px) rotateY(' + (cur + span * part) + 'deg) scale(' + sc + ')'; };
+        coin.animate([
+          { transform: at(0, 0, 1), easing: 'cubic-bezier(.2,.6,.3,1)' },
+          { transform: at(-72, 0.5, 1.1), offset: 0.4, easing: 'cubic-bezier(.6,0,.75,.5)' },
+          { transform: at(0, 0.965, 1), offset: 0.84, easing: 'ease-out' },
+          { transform: at(-9, 0.992, 1.02), offset: 0.92, easing: 'ease-in' },
+          { transform: at(0, 1, 1) }
+        ], { duration: dur, fill: 'forwards' });
+        $('#cfShadow', pane).animate([
+          { transform: 'scale(1)', opacity: 1, easing: 'cubic-bezier(.2,.6,.3,1)' }, { transform: 'scale(.42)', opacity: .35, offset: 0.4, easing: 'cubic-bezier(.6,0,.75,.5)' },
+          { transform: 'scale(1)', opacity: 1, offset: 0.84 }, { transform: 'scale(.93)', opacity: .9, offset: 0.92 }, { transform: 'scale(1)', opacity: 1 }
+        ], { duration: dur });
       } catch (e) { coin.style.transform = 'rotateY(' + target + 'deg)'; }
       setTimeout(function () {
         st.busy = false; st.hist.push(res);

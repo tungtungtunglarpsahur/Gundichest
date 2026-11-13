@@ -1,6 +1,6 @@
 # GundiChest
 
-A chest opening game for the browser: a 3D treasure chest, 25 cards in five rarities, an inventory, six
+A chest opening game for the browser: a 3D treasure chest, 26 cards in five rarities, an inventory, six
 play-coin games, and trading between players. Built for phones first.
 
 Play coins only. Nothing in the game costs or pays real money.
@@ -20,7 +20,7 @@ Play coins only. Nothing in the game costs or pays real money.
 | Common    | 63.4%     | 7     | 10        |
 | Uncommon  | 22%       | 3     | 25        |
 | Rare      | 14%       | 8     | 100       |
-| Epic      | 0.5%      | 4     | 1,500     |
+| Epic      | 0.5%      | 5     | 1,500     |
 | Legendary | 0.1%      | 3     | 10,000    |
 
 A chest rolls the rarity first, then one card of that rarity. The table lives in `src/js/01_data.js`.

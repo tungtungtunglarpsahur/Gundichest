@@ -59,3 +59,20 @@ var onTap = function (node, fn) {
   node.addEventListener('click', function (e) { fn(e); });
 };
 var reducedMotion = (function () { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
+
+// The page behaves like an app: no zooming, no selecting or copying. Fields you type into are left alone,
+// so writing, pasting a password and the keyboard's own menu keep working.
+(function () {
+  var inField = function (t) { return !!(t && t.closest && t.closest('input, textarea, [contenteditable="true"]')); };
+  var stop = function (e) { e.preventDefault(); };
+  var outside = function (e) { if (!inField(e.target)) e.preventDefault(); };
+  // pinch: Safari sends its own gesture events; elsewhere two fingers moving is the pinch
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (ev) { document.addEventListener(ev, stop, { passive: false }); });
+  document.addEventListener('touchmove', function (e) { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  // trackpad pinch and ctrl + wheel on a computer
+  window.addEventListener('wheel', function (e) { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false });
+  // a second tap right after the first would zoom in some browsers; it still counts as a tap
+  document.addEventListener('dblclick', outside, { passive: false });
+  // no selection, no copy, no menu on a long press or right click, nothing to drag out of the page
+  ['selectstart', 'copy', 'cut', 'contextmenu', 'dragstart'].forEach(function (ev) { document.addEventListener(ev, outside); });
+})();

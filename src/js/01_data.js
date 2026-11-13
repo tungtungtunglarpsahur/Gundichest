@@ -9,11 +9,11 @@ var RARITY = {
 };
 var RARITY_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
 // Every card has a fixed id. Saved games and trades refer to cards by it, so an id never moves to another card,
-// whatever happens to a name or a rarity (Herr Lang, i21, started out as a common). The order here is the order
-// cards are listed in: by rarity.
+// whatever happens to a name or a rarity (Herr Lang, i21, started out as a common). A new card takes the next
+// free number (Frau Hübner is i25). The order here is the order cards are listed in: by rarity.
 var ITEMS = [
   ['i0', 'Frau Vogtmann', 'legendary'], ['i1', 'Herr Lein', 'legendary'], ['i2', 'Frau Zapf', 'legendary'],
-  ['i3', 'Frau Ullmann', 'epic'], ['i4', 'Herr Schreivogel', 'epic'], ['i5', 'Frau Duppel', 'epic'], ['i6', 'Herr Gallert', 'epic'],
+  ['i3', 'Frau Ullmann', 'epic'], ['i4', 'Herr Schreivogel', 'epic'], ['i5', 'Frau Duppel', 'epic'], ['i6', 'Herr Gallert', 'epic'], ['i25', 'Frau Hübner', 'epic'],
   ['i7', 'Frau Masi', 'rare'], ['i8', 'Herr Weber-Hänel', 'rare'], ['i9', 'Frau Wunder', 'rare'], ['i10', 'Frau Butterhof', 'rare'], ['i11', 'Herr Gessner', 'rare'], ['i12', 'Herr Kühl', 'rare'], ['i13', 'Herr Sieder', 'rare'], ['i21', 'Herr Lang', 'rare'],
   ['i14', 'Herr Reuther', 'uncommon'], ['i15', 'Frau Köhler', 'uncommon'], ['i16', 'Frau Geuß', 'uncommon'],
   ['i17', 'Frau Kaese', 'common'], ['i18', 'Frau Benker', 'common'], ['i19', 'Frau Peinl', 'common'], ['i20', 'Herr Franke', 'common'], ['i22', 'Frau Ploß', 'common'], ['i23', 'Frau Beier', 'common'], ['i24', 'Herr Bäumler', 'common']

@@ -178,7 +178,7 @@ Games.register({
       var edge = 0.004, shown = win ? Math.min(Math.max(roll, edge), Math.max(edge, p - edge)) : Math.min(Math.max(roll, p + edge), 1 - edge);
       var fast = !!Store.s.settings.fast;
       // A long spin: a short pull back, then many turns that slow down until the pointer creeps to its place.
-      var turns = reducedMotion ? 1 : fast ? 5 : 11, dur = reducedMotion ? 500 : fast ? 3000 : 7200, back = reducedMotion ? 0 : 12, lead = reducedMotion ? 0 : 260;
+      var turns = reducedMotion ? 1 : fast ? 7 : 18, dur = reducedMotion ? 500 : fast ? 5000 : 13000, back = reducedMotion ? 0 : 12, lead = reducedMotion ? 0 : 260;
       var from = st.angle % 360, to = 360 * turns + shown * 360, t0 = performance.now(), lastTick = Math.floor(from / 30);
       Sfx.whoosh();
       (function step(now) {
@@ -186,7 +186,7 @@ Games.register({
         if (t < lead) a = from - back * ease.outCubic(t / lead);
         else {
           var k = sat((t - lead) / (dur - lead));
-          a = (from - back) + (to - (from - back)) * (1 - Math.pow(1 - k, 3));      // still visibly creeping in the last second
+          a = (from - back) + (to - (from - back)) * (1 - Math.pow(1 - k, 2.8));    // still visibly creeping in the last seconds
         }
         setNeedle(a);
         var seg = Math.floor(a / 30);
