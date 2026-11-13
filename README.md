@@ -17,11 +17,11 @@ Play coins only. Nothing in the game costs or pays real money.
 
 | Rarity    | Per chest | Cards | Sells for |
 |-----------|-----------|-------|-----------|
-| Common    | 63.2%     | 7     | 10        |
+| Common    | 63.4%     | 7     | 10        |
 | Uncommon  | 22%       | 3     | 25        |
 | Rare      | 14%       | 8     | 100       |
 | Epic      | 0.5%      | 4     | 1,500     |
-| Legendary | 0.3%      | 3     | 10,000    |
+| Legendary | 0.1%      | 3     | 10,000    |
 
 A chest rolls the rarity first, then one card of that rarity. The table lives in `src/js/01_data.js`.
 

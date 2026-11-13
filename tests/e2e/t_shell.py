@@ -30,8 +30,8 @@ with sync_playwright() as p:
     # the index shows the new chances
     pg.click('#btnIndex'); pg.wait_for_selector('.sheet.on .ix-group')
     text = pg.inner_text('.sheet.on .ix-legend')
-    c.ok('Legendary 0.3%' in text and 'Epic 0.5%' in text and 'Common 63.2%' in text, 'index: legendary 0.3%, epic 0.5%, common 63.2%', text)
-    c.ok('1 in 1,000' in pg.inner_text('.sheet.on .ix-group.r-legendary'), 'one legendary card: 1 in 1,000 chests')
+    c.ok('Legendary 0.1%' in text and 'Epic 0.5%' in text and 'Common 63.4%' in text, 'index: legendary 0.1%, epic 0.5%, common 63.4%', text)
+    c.ok('1 in 3,000' in pg.inner_text('.sheet.on .ix-group.r-legendary'), 'one legendary card: 1 in 3,000 chests')
     c.ok('1 in 800' in pg.inner_text('.sheet.on .ix-group.r-epic'), 'one epic card: 1 in 800 chests')
     pg.click('.sheet.on .x-btn'); pg.wait_for_timeout(450)
     # the request bar makes room without covering the game
