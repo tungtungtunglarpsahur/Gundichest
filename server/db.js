@@ -84,7 +84,7 @@ async function end() { if (pool) { const p = pool; pool = null; schemaReady = nu
 // gc_trades: a asked b. Offers are {"items":{"i3":1},"coins":0}; step is 0 (open), 1 (accepted), 2 (confirmed).
 // ver goes up with every change of a trade, ov only when an offer changes. a_rev / b_rev hold the
 // player's rev right after a finished trade was booked, which is how a later sync knows what it missed.
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 const DDL = [
   `CREATE TABLE IF NOT EXISTS gc_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS gc_users (
@@ -129,6 +129,47 @@ const DDL = [
   // two players can have one request or one open trade between them, not several
   `CREATE UNIQUE INDEX IF NOT EXISTS gc_trades_pair ON gc_trades (LEAST(a_id, b_id), GREATEST(a_id, b_id)) WHERE status IN ('pending', 'open')`,
   `CREATE TABLE IF NOT EXISTS gc_limits (key TEXT PRIMARY KEY, hits INTEGER NOT NULL DEFAULT 0, reset_at TIMESTAMPTZ NOT NULL)`,
+  // One round of Rugpull or Rocket with a bet on it. crash, auto and cash are multipliers times 100; start_at and
+  // crash_at are server clock times in ms. Where it ends (crash, crash_at) stays on the server until it has ended.
+  `CREATE TABLE IF NOT EXISTS gc_rounds (
+     id BIGSERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES gc_users(id) ON DELETE CASCADE,
+     game TEXT NOT NULL,
+     bet BIGINT NOT NULL,
+     auto INTEGER NOT NULL DEFAULT 0,
+     seed INTEGER NOT NULL DEFAULT 0,
+     crash INTEGER NOT NULL,
+     start_at BIGINT NOT NULL,
+     crash_at BIGINT NOT NULL,
+     status TEXT NOT NULL DEFAULT 'live',
+     cash INTEGER NOT NULL DEFAULT 0,
+     paid BIGINT NOT NULL DEFAULT 0,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS gc_rounds_user ON gc_rounds (user_id, status)`,
+  // Coins the server moved itself, with the player's rev right after: a later save from the page is brought
+  // up to date with these, the same way as with finished trades.
+  `CREATE TABLE IF NOT EXISTS gc_ledger (
+     id BIGSERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES gc_users(id) ON DELETE CASCADE,
+     rev INTEGER NOT NULL,
+     coins BIGINT NOT NULL,
+     wager BIGINT NOT NULL DEFAULT 0,
+     won BIGINT NOT NULL DEFAULT 0,
+     mult INTEGER NOT NULL DEFAULT 0,
+     why TEXT NOT NULL,
+     round_id BIGINT,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS gc_ledger_user ON gc_ledger (user_id, rev)`,
+  // What everybody gets told: "Mia got Frau Hübner in Epic!"
+  `CREATE TABLE IF NOT EXISTS gc_feed (
+     id BIGSERIAL PRIMARY KEY,
+     user_id INTEGER NOT NULL REFERENCES gc_users(id) ON DELETE CASCADE,
+     name TEXT NOT NULL,
+     item TEXT NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+   )`,
 ];
 async function migrate() {
   for (let attempt = 1; ; attempt++) {

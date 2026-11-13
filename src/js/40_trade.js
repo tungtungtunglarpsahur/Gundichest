@@ -23,7 +23,7 @@ var Trade = (function () {
   }
   function offerCount(o) { var n = 0; Object.keys((o && o.items) || {}).forEach(function (id) { n += o.items[id]; }); return n; }
   function sameOffer(a, b) { return offerKey(a) === offerKey(b); }
-  function offerKey(o) { return ITEMS.map(function (it) { return (o.items || {})[it.id] || 0; }).join(',') + '|' + (o.coins || 0); }
+  function offerKey(o) { return ALL_CARDS.map(function (it) { return (o.items || {})[it.id] || ''; }).join(',') + '|' + (o.coins || 0); }
   // How good the trade is for the side that gives `give` and gets `get`, in percent of what they give.
   function fairness(give, get) {
     if (give <= 0) return get > 0 ? Infinity : 0;
@@ -50,9 +50,9 @@ var Trade = (function () {
   function presence(u) { return '<span class="pres' + (u.online ? ' on' : '') + '"><i></i>' + (u.online ? 'online' : u.idle != null ? ago(u.idle) : 'offline') + '</span>'; }
   function chips(o, emptyText) {
     var html = '';
-    ITEMS.forEach(function (it) {
+    ALL_CARDS.forEach(function (it) {
       var n = (o.items || {})[it.id]; if (!n) return;
-      html += '<span class="tchip r-' + it.rarity + '"><b>' + esc(shortName(it.name)) + '</b>' + (n > 1 ? '<i>×' + n + '</i>' : '') + '</span>';
+      html += '<span class="tchip r-' + it.rarity + mutCls(it) + '"><b>' + (it.mut ? it.mut.icon + ' ' : '') + esc(cardName(it)) + '</b>' + (n > 1 ? '<i>×' + n + '</i>' : '') + '</span>';
     });
     if (o.coins) html += '<span class="tchip coins"><span class="coin-ic sm"></span><b>' + fmt(o.coins) + '</b></span>';
     return html || '<span class="tr-none">' + esc(emptyText || 'Nothing') + '</span>';
@@ -62,7 +62,7 @@ var Trade = (function () {
   function hold() {
     if (!cur || cur.status !== 'open') { Store.hold(null); return; }
     var a = cur.me.offer, b = draft || a, items = {};
-    ITEMS.forEach(function (it) { var n = Math.max((a.items || {})[it.id] || 0, (b.items || {})[it.id] || 0); if (n) items[it.id] = n; });
+    ALL_CARDS.forEach(function (it) { var n = Math.max((a.items || {})[it.id] || 0, (b.items || {})[it.id] || 0); if (n) items[it.id] = n; });
     Store.hold({ items: items, coins: Math.max(a.coins || 0, b.coins || 0) });
   }
   function watch() {
@@ -277,9 +277,9 @@ var Trade = (function () {
     $('#trTheirs', root).innerHTML = chips(theirs, t.with.name + ' has not added anything yet');
     // my side: every chip can be removed
     var html = '';
-    ITEMS.forEach(function (it) {
+    ALL_CARDS.forEach(function (it) {
       var n = (mine.items || {})[it.id]; if (!n) return;
-      html += '<button type="button" class="tchip r-' + it.rarity + '" data-rm="' + it.id + '" aria-label="Remove ' + esc(it.name) + '"><b>' + esc(shortName(it.name)) + '</b>' + (n > 1 ? '<i>×' + n + '</i>' : '') + '<u>×</u></button>';
+      html += '<button type="button" class="tchip r-' + it.rarity + mutCls(it) + '" data-rm="' + it.id + '" aria-label="Remove ' + esc(cardName(it, true)) + '"><b>' + (it.mut ? it.mut.icon + ' ' : '') + esc(cardName(it)) + '</b>' + (n > 1 ? '<i>×' + n + '</i>' : '') + '<u>×</u></button>';
     });
     if (mine.coins) html += '<button type="button" class="tchip coins" data-rm="coins" aria-label="Remove coins"><span class="coin-ic sm"></span><b>' + fmt(mine.coins) + '</b><u>×</u></button>';
     $('#trMine', root).innerHTML = html || '<span class="tr-none">Add cards or coins you want to give</span>';
@@ -330,12 +330,12 @@ var Trade = (function () {
       body.appendChild(list); body.parentNode.appendChild(foot);
       function paint() {
         var o = draft || (cur ? cur.me.offer : { items: {}, coins: 0 }), inv = Store.s.inv, html = '', any = false;
-        ITEMS.forEach(function (it) {
+        ALL_CARDS.forEach(function (it) {
           var have = inv[it.id] || 0; if (!have) return;
           any = true;
           var n = (o.items || {})[it.id] || 0, last = it.name.split(' ').pop();
-          html += '<div class="inv-item r-' + it.rarity + (n ? ' picked' : '') + '" style="animation:none"><div class="av">' + esc(last.charAt(0)) + '</div>' +
-            '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + RARITY[it.rarity].name + '</b><span class="worth"><span class="coin-ic sm"></span>' + fmt(it.sell) + '</span></div></div>' +
+          html += '<div class="inv-item r-' + it.rarity + mutCls(it) + (n ? ' picked' : '') + '" style="animation:none"><div class="av">' + esc(last.charAt(0)) + '</div>' +
+            '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + RARITY[it.rarity].name + '</b>' + mutTag(it) + '<span class="worth"><span class="coin-ic sm"></span>' + fmt(it.sell) + '</span></div></div>' +
             '<div class="stepper"><button type="button" data-id="' + it.id + '" data-d="-1" aria-label="One less"' + (n ? '' : ' disabled') + '>−</button><b class="num" aria-label="' + n + ' of ' + have + '">' + n + '<small>/' + have + '</small></b>' +
             '<button type="button" data-id="' + it.id + '" data-d="1" aria-label="One more"' + (n >= have ? ' disabled' : '') + '>+</button></div></div>';
         });

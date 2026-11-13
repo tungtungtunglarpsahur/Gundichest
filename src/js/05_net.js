@@ -15,6 +15,7 @@ var Net = (function () {
   var started = false, listeners = [];
   var syncing = null, syncTimer = 0, firstDirty = 0;
   var pollTimer = 0, polling = false, pollFails = 0, lastActive = Date.now(), watch = null, lastPoll = null;
+  var feedAt = -1;               // the last announcement this page has heard of (-1: none yet, do not replay old ones)
 
   function emit(what, data) { listeners.forEach(function (fn) { try { fn(what, data); } catch (e) { try { console.error(e); } catch (er) {} } }); }
   function saveKey(id) { return 'gundichest.u' + id + '.v1'; }
@@ -102,7 +103,14 @@ var Net = (function () {
     var seq = Store.seq, rev = Store.sync.rev;
     syncing = call('sync', { rev: rev, state: Store.progress() }, opt).then(function (r) {
       syncing = null;
-      (r.trades || []).forEach(function (t) { Store.applyTrade(t.give, t.get); });
+      // what the server did meanwhile, in its order: finished trades and coins it moved (Rugpull, Rocket).
+      // An entry that was already booked from the answer to the request that caused it is skipped.
+      var missed = (r.trades || []).map(function (t) { return { rev: t.rev || 0, t: t }; }).concat((r.coins || []).map(function (e) { return { rev: e.rev, e: e }; }));
+      missed.sort(function (a, b) { return a.rev - b.rev; });
+      missed.forEach(function (x) {
+        if (x.e && x.rev <= Store.sync.rev) return;
+        if (x.t) Store.applyTrade(x.t.give, x.t.get); else Store.applyCoins(x.e);
+      });
       Store.markSynced(r.rev, Store.seq !== seq);
       if (r.trades && r.trades.length) emit('booked', r.trades);
       if (Store.sync.dirty) scheduleSync(4000);
@@ -118,6 +126,17 @@ var Net = (function () {
       throw e;
     });
     return syncing;
+  }
+  // Coins the server moved in answer to a request of this page (r.book, in order). An entry that is the very next
+  // thing after what this save knows is booked at once; anything else is brought in by the next save.
+  function book(r) {
+    var gap = false;
+    ((r && r.book) || []).forEach(function (e) {
+      if (e.rev <= Store.sync.rev) return;
+      if (!gap && e.rev === Store.sync.rev + 1) { Store.applyCoins(e); Store.markSynced(e.rev, Store.sync.dirty); }
+      else gap = true;
+    });
+    if (gap) syncNow(true).catch(function () {});
   }
   // Last chance when the page is being put away: the browser finishes this request even if the page is gone.
   function flush() {
@@ -147,8 +166,12 @@ var Net = (function () {
     if (!session || !started) return;
     if (polling) return;
     polling = true;
-    call('poll', watch ? { trade: watch } : {}).then(function (r) {
+    var ask = watch ? { trade: watch } : {};
+    if (feedAt >= 0) ask.feed = feedAt;
+    call('poll', ask).then(function (r) {
       polling = false; pollFails = 0; lastPoll = r;
+      if (typeof r.feedAt === 'number') feedAt = r.feedAt;
+      (r.feed || []).forEach(function (f) { emit('feed', f); });
       emit('poll', r);
       if (r.rev > Store.sync.rev && !syncing) syncNow(true).catch(function () {});          // a trade was booked, or another device saved
       else if (Store.sync.dirty && !syncTimer) scheduleSync(3000);
@@ -238,7 +261,9 @@ var Net = (function () {
         writeSession(null); stop(); Store.use(Store.DEVICE); location.reload();
       });
     },
-    start: start, syncNow: syncNow, flush: flush,
+    start: start, syncNow: syncNow, flush: flush, book: book,
+    // Tells everybody who is online about a big pull.
+    announce: function (item) { if (enabled && session && started) call('announce', { item: item.id }).catch(function () {}); },
     // The trade room the page is in: the heartbeat then also carries its changes. null when there is none.
     watch: function (w) { var was = watch; watch = w ? { id: w.id, ver: w.ver } : null; if ((!was) !== (!watch) || (w && was && was.id !== w.id)) loop(300); },
     pollNow: function () { loop(0); },

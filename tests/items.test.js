@@ -9,7 +9,7 @@ const server = require('../server/items');
 function clientData() {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'js', '01_data.js'), 'utf8');
   const box = { rand: Math.random, randInt: (n) => Math.floor(Math.random() * n) };
-  vm.runInNewContext(src + '\n;this.out = { RARITY: RARITY, ITEMS: ITEMS, RARITY_ORDER: RARITY_ORDER, rollItem: rollItem, shortName: shortName };', box);
+  vm.runInNewContext(src + '\n;this.out = { RARITY: RARITY, ITEMS: ITEMS, RARITY_ORDER: RARITY_ORDER, rollItem: rollItem, shortName: shortName, MUTATIONS: MUTATIONS, ALL_CARDS: ALL_CARDS, ITEM_BY_ID: ITEM_BY_ID, rollMutation: rollMutation, mutate: mutate, cardName: cardName };', box);
   return box.out;
 }
 
@@ -37,7 +37,7 @@ test('cards keep their ids', () => {
   assert.equal(byId.i21.rarity, 'rare');
   assert.equal(server.ITEMS.i21.sell, 100);
   assert.equal(byId.i25.rarity, 'epic');
-  assert.deepEqual(Object.keys(server.ITEMS), Array.from({ length: 26 }, (_, i) => 'i' + i));
+  assert.deepEqual(Object.keys(server.ITEMS).slice(0, 26), Array.from({ length: 26 }, (_, i) => 'i' + i));
 });
 
 test('cards are listed by rarity', () => {
@@ -66,6 +66,42 @@ test('a chest gives each rarity about as often as the table says', () => {
     const p = RARITY[k].chance / 100, sd = Math.sqrt(p * (1 - p) / n);
     assert.ok(Math.abs(seen[k] / n - p) < 5 * sd, k + ': ' + (seen[k] / n * 100).toFixed(3) + '% vs ' + RARITY[k].chance + '%');
   }
+});
+
+test('server and game agree on every mutation, and a mutated card is worth its multiple', () => {
+  const { MUTATIONS, ALL_CARDS, ITEMS, ITEM_BY_ID, cardName } = clientData();
+  assert.deepEqual(Object.fromEntries(MUTATIONS.map((m) => [m.key, m.mult])), Object.assign({}, server.MUTATIONS));
+  assert.equal(ALL_CARDS.length, ITEMS.length * (1 + MUTATIONS.length));
+  assert.equal(ALL_CARDS.length, Object.keys(server.ITEMS).length);
+  for (const c of ALL_CARDS) {
+    assert.ok(server.isItem(c.id), c.id);
+    assert.equal(server.ITEMS[c.id].sell, c.sell, c.id);
+    assert.equal(server.ITEMS[c.id].rarity, c.rarity, c.id);
+  }
+  assert.equal(ITEM_BY_ID.i17_gold.sell, 20);
+  assert.equal(ITEM_BY_ID.i0_rainbow.sell, 300000);
+  assert.equal(cardName(ITEM_BY_ID.i17_gold), 'Gold F. Kaese');
+  assert.equal(cardName(ITEM_BY_ID.i17_gold, true), 'Gold Frau Kaese');
+  assert.equal(server.isItem('i17_gold_gold'), false);
+});
+
+test('one chest in ten is mutated, each mutation about as often as its chance says', () => {
+  const { MUTATIONS, rollMutation, mutate, ITEMS } = clientData();
+  const total = MUTATIONS.reduce((s, m) => s + m.chance, 0);
+  assert.ok(Math.abs(total - 10) < 1e-9, 'total ' + total);
+  const n = 600000, seen = {};
+  let none = 0;
+  for (let i = 0; i < n; i++) { const m = rollMutation(); if (m) seen[m.key] = (seen[m.key] || 0) + 1; else none++; }
+  assert.ok(Math.abs(none / n - 0.9) < 0.003, 'plain: ' + none / n);
+  for (const m of MUTATIONS) {
+    const p = m.chance / 100, sd = Math.sqrt(p * (1 - p) / n);
+    assert.ok(Math.abs((seen[m.key] || 0) / n - p) < 5 * sd, m.key + ': ' + ((seen[m.key] || 0) / n * 100).toFixed(3) + '% vs ' + m.chance + '%');
+  }
+  // rarer means worth more
+  const byChance = MUTATIONS.slice().sort((a, b) => b.chance - a.chance);
+  assert.deepEqual(byChance.map((m) => m.mult), byChance.map((m) => m.mult).slice().sort((a, b) => a - b));
+  assert.equal(mutate(ITEMS[0], null), ITEMS[0]);
+  assert.equal(mutate(ITEMS[0], MUTATIONS[0]).id, ITEMS[0].id + '_' + MUTATIONS[0].key);
 });
 
 test('card names are shortened to "H. Name" and "F. Name"', () => {

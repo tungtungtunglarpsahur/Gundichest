@@ -31,6 +31,7 @@
   UI.initShell();
   onTap($('#btnSettings'), function () { Sfx.click(); SettingsSheet.open(); });
   Inventory.init();
+  Feed.init();
   Games.init();
   Trade.init();
   document.addEventListener('pointerdown', function unlock() { Sfx.unlock(); document.removeEventListener('pointerdown', unlock); }, { passive: true });

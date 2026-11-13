@@ -4,6 +4,7 @@
   "buildCommand": "node tools/build.mjs && node tools/dbcheck.mjs",
   "outputDirectory": "public",
   "regions": ["fra1"],
+  "functions": { "api/rpc.js": { "maxDuration": 60 } },
   "headers": [
     {
       "source": "/(.*)",

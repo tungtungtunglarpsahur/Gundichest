@@ -209,12 +209,12 @@ async function history(me) {
 // Finished trades of this player that were booked after the given rev, oldest first.
 async function bookedSince(userId, rev, run) {
   const rows = await run(
-    `SELECT id, a_id, a_offer, b_offer FROM gc_trades
+    `SELECT id, a_id, a_offer, b_offer, a_rev, b_rev FROM gc_trades
       WHERE status = 'done' AND ((a_id = $1 AND a_rev > $2) OR (b_id = $1 AND b_rev > $2))
       ORDER BY done_at, id`, [userId, rev]);
   return rows.map((t) => {
     const a = cleanOffer(t.a_offer), b = cleanOffer(t.b_offer);
-    return t.a_id === userId ? { id: t.id, give: a, get: b } : { id: t.id, give: b, get: a };
+    return t.a_id === userId ? { id: t.id, rev: t.a_rev, give: a, get: b } : { id: t.id, rev: t.b_rev, give: b, get: a };
   });
 }
 

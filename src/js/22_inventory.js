@@ -34,7 +34,7 @@ var Inventory = (function () {
       '<div class="inv-top"><div><h1 class="h1">Inventory</h1><div class="sub" style="margin-top:6px">Sell what you pull to get coins for the games.</div></div></div>' +
       '<div class="inv-stats"><div class="stat"><div class="k">Items</div><div class="v">' + fmt(T.n) + '</div></div>' +
       '<div class="stat"><div class="k">Worth</div><div class="v"><span class="coin-ic sm"></span>' + fmtShort(T.val) + '</div></div>' +
-      '<div class="stat"><div class="k">Found</div><div class="v">' + Object.keys(Store.s.found).length + '/' + ITEMS.length + '</div></div></div>';
+      '<div class="stat"><div class="k">Found</div><div class="v">' + ITEMS.filter(function (it) { return Store.s.found[it.id]; }).length + '/' + ITEMS.length + '</div></div></div>';
     if (!T.n) {
       html += '<div class="empty"><b>Nothing here yet</b>Open a chest and your pulls land here.<div style="margin-top:16px"><button class="btn gold" type="button" id="invGo">Open a chest</button></div></div></div>';
       root.innerHTML = html;
@@ -42,21 +42,22 @@ var Inventory = (function () {
       return;
     }
     html += '<div class="filters" id="invFilters"><button type="button" class="chip' + (filter === 'all' ? ' on' : '') + '" data-f="all">All</button>' +
+      '<button type="button" class="chip' + (filter === 'mut' ? ' on' : '') + '" data-f="mut">✨ Mutated</button>' +
       RARITY_ORDER.map(function (k) { return '<button type="button" class="chip' + (filter === k ? ' on' : '') + '" data-f="' + k + '"><i class="rdot" style="--rc:' + RARITY[k].color + '"></i>' + RARITY[k].name + '</button>'; }).join('') + '</div>' +
       '<div class="row" style="margin-bottom:12px"><button class="btn sm grow" type="button" id="sellDupes">Sell duplicates</button><button class="btn sm grow" type="button" id="sellCommon">Sell commons</button><button class="btn sm grow red" type="button" id="sellAll">Sell all</button></div><div id="invList">';
     var shown = 0;
-    ITEMS.forEach(function (it) {
+    ALL_CARDS.forEach(function (it) {
       var n = inv[it.id]; if (!n) return;
-      if (filter !== 'all' && it.rarity !== filter) return;
+      if (filter === 'mut' ? !it.mut : filter !== 'all' && it.rarity !== filter) return;
       shown++;
       var R = RARITY[it.rarity], last = it.name.split(' ').pop(), free = Store.free(it.id), held = n - free;
-      html += '<div class="inv-item r-' + it.rarity + '" style="animation-delay:' + Math.min(shown * 18, 240) + 'ms"><div class="av">' + esc(last.charAt(0)) + '</div>' +
-        '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + R.name + '</b><span>' + fmtPct(it.chance) + '</span><span class="cnt">×' + n + '</span>' +
+      html += '<div class="inv-item r-' + it.rarity + mutCls(it) + '" style="animation-delay:' + Math.min(shown * 18, 240) + 'ms"><div class="av">' + esc(last.charAt(0)) + '</div>' +
+        '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + R.name + '</b>' + (it.mut ? mutTag(it) : '<span>' + fmtPct(it.chance) + '</span>') + '<span class="cnt">×' + n + '</span>' +
         (held ? '<span class="held">' + held + ' in a trade</span>' : '') + '</div></div>' +
         '<div class="inv-acts"><button class="btn sm" type="button" data-sell="' + it.id + '" data-n="1"' + (free ? '' : ' disabled') + '><span class="coin-ic sm"></span>' + fmtShort(it.sell) + '</button>' +
         (free > 1 ? '<button class="btn sm gold" type="button" data-sell="' + it.id + '" data-n="' + free + '">All ' + fmtShort(it.sell * free) + '</button>' : '') + '</div></div>';
     });
-    if (!shown) html += '<div class="empty"><b>No ' + RARITY[filter].name.toLowerCase() + ' items</b>Try another filter.</div>';
+    if (!shown) html += '<div class="empty"><b>No ' + (filter === 'mut' ? 'mutated' : RARITY[filter].name.toLowerCase()) + ' items</b>' + (filter === 'mut' ? 'One chest in ten comes out mutated.' : 'Try another filter.') + '</div>';
     html += '</div><div class="note">Selling is instant and final.</div></div>';
     var sc = $('.scroll', root), top = sc ? sc.scrollTop : 0;
     root.innerHTML = html;
@@ -69,7 +70,7 @@ var Inventory = (function () {
       });
     });
     onTap($('#sellDupes', root), function () { sellMany(function (it, n) { return n - 1; }, 'Sell duplicates'); });
-    onTap($('#sellCommon', root), function () { sellMany(function (it, n) { return it.rarity === 'common' ? n : 0; }, 'Sell commons'); });
+    onTap($('#sellCommon', root), function () { sellMany(function (it, n) { return it.rarity === 'common' && !it.mut ? n : 0; }, 'Sell commons'); });
     onTap($('#sellAll', root), function () { sellMany(function (it, n) { return n; }, 'Sell everything'); });
   }
   return {

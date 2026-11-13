@@ -523,7 +523,7 @@ describe('GundiChest API', { skip: skipReason || false }, () => {
       // a kept opening chests on its page: one more card, some coins from a sale
       const s = await T.ok('sync', { rev: 0, state: { coins: 310, inv: { i17: 3, i20: 1 }, opened: 2 } }, r.a.token);
       assert.equal(s.rev, 2);
-      assert.deepEqual(s.trades, [{ id: r.id, give: { items: { i17: 2 }, coins: 0 }, get: { items: { i14: 1 }, coins: 20 } }]);
+      assert.deepEqual(s.trades, [{ id: r.id, rev: 1, give: { items: { i17: 2 }, coins: 0 }, get: { items: { i14: 1 }, coins: 20 } }]);
       const st = await T.stateOf(r.a);
       assert.deepEqual([st.coins, st.inv, st.opened], [330, { i14: 1, i17: 1, i20: 1 }, 2]);
       const next = await T.ok('sync', { rev: 2, state: st }, r.a.token);
@@ -630,6 +630,245 @@ describe('GundiChest API', { skip: skipReason || false }, () => {
       assert.equal((await T.ok('poll', {}, p.token)).rev, 0);
       await T.ok('sync', { rev: 0, state: { coins: 1 } }, p.token);
       assert.equal((await T.ok('poll', {}, p.token)).rev, 1);
+    });
+  });
+
+  describe('mutations', () => {
+    it('keeps mutated cards in a saved game and drops what does not exist', async () => {
+      const p = await T.player();
+      await T.ok('sync', { rev: 0, state: { inv: { i17: 1, i17_gold: 2, i3_rainbow: 1, i17_nope: 3, i99_gold: 1, i17_gold_gold: 1 } } }, p.token);
+      const s = await T.stateOf(p);
+      assert.deepEqual(s.inv, { i17: 1, i17_gold: 2, i3_rainbow: 1 });
+      assert.deepEqual(Object.keys(s.found).sort(), ['i17', 'i17_gold', 'i3_rainbow']);
+    });
+    it('values a mutated card at its multiple in a trade', () => {
+      const { offerValue, ITEMS, MUTATIONS } = require('../server/items');
+      assert.equal(offerValue({ items: { i17_gold: 1, i17: 1 }, coins: 5 }), 10 * 2 + 10 + 5);
+      assert.equal(ITEMS.i0_rainbow.sell, 10000 * 30);
+      assert.equal(Object.keys(ITEMS).length, 26 * (1 + Object.keys(MUTATIONS).length));
+    });
+    it('trades them like any other card', async () => {
+      const { a, b, id } = await T.room({ inv: { i17_lava: 1 } }, { coins: 50 });
+      await T.ok('trade.offer', { id, items: { i17_lava: 1 } }, a.token);
+      const t = (await T.ok('trade.offer', { id, coins: 30 }, b.token)).trade;
+      for (const step of [1, 2]) for (const who of [a, b]) await T.ok('trade.step', { id, step, ov: t.ov }, who.token);
+      assert.deepEqual((await T.stateOf(b)).inv, { i17_lava: 1 });
+      assert.equal((await T.stateOf(a)).coins, 30);
+    });
+  });
+
+  describe('announcements', () => {
+    it('tells everybody else about an epic, once', async () => {
+      const a = await T.player(), b = await T.player();
+      const p0 = await T.ok('poll', {}, b.token);
+      assert.deepEqual(p0.feed, []);
+      assert.equal(typeof p0.feedAt, 'number');
+      await T.ok('announce', { item: 'i3' }, a.token);
+      const p1 = await T.ok('poll', { feed: p0.feedAt }, b.token);
+      assert.deepEqual(p1.feed.map((f) => [f.name, f.item]), [[a.name, 'i3']]);
+      assert.ok(p1.feedAt > p0.feedAt);
+      assert.deepEqual((await T.ok('poll', { feed: p1.feedAt }, b.token)).feed, []);
+      const own = await T.ok('poll', { feed: p0.feedAt }, a.token);
+      assert.deepEqual(own.feed, []);                       // nobody is told about their own pull
+      assert.equal(own.feedAt, p1.feedAt);
+    });
+    it('does not replay old announcements to a page that just opened', async () => {
+      const a = await T.player(), b = await T.player();
+      await T.ok('announce', { item: 'i0' }, a.token);
+      assert.deepEqual((await T.ok('poll', {}, b.token)).feed, []);
+    });
+    it('is for the big pulls only', async () => {
+      const a = await T.player();
+      for (const item of ['i17', 'i7', 'i17_gold', 'i17_neon', 'nope', '', null]) await status(400, 'announce', { item }, a.token);
+      for (const item of ['i25', 'i1', 'i17_diamond', 'i17_rainbow']) await status(200, 'announce', { item }, a.token);
+    });
+    it('stops a flood', async () => {
+      const a = await T.player();
+      for (let i = 0; i < 8; i++) await status(200, 'announce', { item: 'i3' }, a.token);
+      await status(429, 'announce', { item: 'i3' }, a.token);
+    });
+  });
+
+  describe('Rugpull and Rocket on the server', () => {
+    const crash = require('../server/crash');
+    const CrashMath = require('../server/crashmath');
+    const rocket = CrashMath.games.rocket.path();
+    const T0 = 1700000000000;
+    let now = T0;
+    const msTo = (m, path) => Math.ceil((path || rocket).timeAt(m) * 1000);
+    before(() => { crash.hooks.now = () => now; });
+    after(() => { crash.hooks.now = () => Date.now(); crash.hooks.roll = null; });
+    const start = async (p, roll, opt) => {
+      crash.hooks.roll = () => roll; now = T0;
+      return T.ok('crash.bet', Object.assign({ game: 'rocket', bet: 200, auto: 0, startIn: 5000 }, opt), p.token);
+    };
+
+    it('takes the bet from the saved game and does not say where the round ends', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      assert.equal(r.rev, 1);
+      assert.deepEqual(r.book, [{ rev: 1, coins: -200, wager: 200, won: 0, mult: 0, why: 'bet' }]);
+      assert.deepEqual([r.round.game, r.round.bet, r.round.status, r.round.startIn], ['rocket', 200, 'live', 5000]);
+      assert.ok(!('crash' in r.round) && !('crashIn' in r.round), 'the end of a running round is not sent');
+      const s = await T.stateOf(p);
+      assert.deepEqual([s.coins, s.stats.wagered], [800, 200]);
+      const live = await T.ok('crash.state', {}, p.token);
+      assert.equal(live.rounds.length, 1);
+      assert.ok(!JSON.stringify(live).includes('crash'), 'not after a reload either');
+    });
+    it('pays a cash-out at the multiplier of the server clock', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      now = T0 + 5000 + msTo(2);
+      const c = await T.ok('crash.cashout', { id: r.round.id }, p.token);
+      assert.deepEqual([c.round.status, c.round.mult, c.round.paid, c.round.crash], ['cashed', 2, 400, 3]);
+      assert.ok(c.round.crashIn > 0, 'the page is told how long the chart keeps climbing');
+      assert.deepEqual(c.book, [{ rev: 2, coins: 400, wager: 0, won: 400, mult: 2, why: 'cashout' }]);
+      const s = await T.stateOf(p);
+      assert.deepEqual([s.coins, s.stats.won, s.stats.bestWin, s.stats.bestMult], [1200, 400, 400, 2]);
+      const again = await T.ok('crash.cashout', { id: r.round.id }, p.token);
+      assert.deepEqual([again.book, again.round.paid], [[], 400], 'a second cash-out pays nothing');
+      assert.equal((await T.stateOf(p)).coins, 1200);
+    });
+    it('is too late once the round has ended, however the page asks', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      now = T0 + 5000 + msTo(3);
+      const c = await T.ok('crash.cashout', { id: r.round.id }, p.token);
+      assert.deepEqual([c.round.status, c.round.crash, c.book], ['rugged', 3, []]);
+      assert.equal((await T.stateOf(p)).coins, 800);
+      await status(400, 'crash.cashout', { id: r.round.id, at: 2, mult: 2, now: T0 }, p.token).catch(() => {});
+      assert.equal((await T.stateOf(p)).coins, 800);
+    });
+    it('cannot cash out before the round has started', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      now = T0 + 4999;
+      assert.equal((await status(409, 'crash.cashout', { id: r.round.id }, p.token)).error, 'early');
+    });
+    it('ends some rounds at 1.00 before anybody can get out', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 1);
+      now = T0 + 5000;
+      assert.equal((await T.ok('crash.cashout', { id: r.round.id }, p.token)).round.status, 'rugged');
+    });
+    it('pays an auto cash-out even when the page is gone', async () => {
+      const p = await T.player({ coins: 1000 });
+      await start(p, 3, { auto: 1.5 });
+      now = T0 + 3600000;
+      const me = await T.ok('me', { rev: 1 }, p.token);
+      assert.equal(me.rev, 2);
+      assert.equal(me.state.coins, 800 + 300);
+      assert.deepEqual((await T.ok('crash.state', {}, p.token)).rounds, []);
+    });
+    it('an auto cash-out at the very end still wins, one above it loses', async () => {
+      const a = await T.player({ coins: 1000 }), b = await T.player({ coins: 1000 });
+      const ra = await start(a, 3, { auto: 3 }), rb = await start(b, 3, { auto: 3.01 });
+      now = T0 + 5000 + msTo(3) + 1;
+      assert.deepEqual([(await T.ok('crash.wait', { id: ra.round.id }, a.token)).round.status, (await T.ok('crash.wait', { id: rb.round.id }, b.token)).round.status], ['cashed', 'rugged']);
+      assert.deepEqual([(await T.stateOf(a)).coins, (await T.stateOf(b)).coins], [1400, 800]);
+    });
+    it('lets the auto cash-out be changed only to a point not passed yet', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 10, { auto: 5 });
+      now = T0 + 5000 + msTo(2);
+      assert.equal((await status(409, 'crash.auto', { id: r.round.id, auto: 1.5 }, p.token)).error, 'late');
+      assert.equal((await T.ok('crash.auto', { id: r.round.id, auto: 2.5 }, p.token)).round.auto, 2.5);
+      now = T0 + 5000 + msTo(2.5);
+      const c = await T.ok('crash.cashout', { id: r.round.id }, p.token);
+      assert.deepEqual([c.round.status, c.round.mult, c.round.paid], ['cashed', 2.5, 500]);
+    });
+    it('gives the bet back when it is cancelled before the start, not after', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      now = T0 + 2000;
+      const c = await T.ok('crash.cancel', { id: r.round.id }, p.token);
+      assert.deepEqual([c.round.status, c.book[0].coins, c.book[0].wager], ['cancelled', 200, -200]);
+      const s = await T.stateOf(p);
+      assert.deepEqual([s.coins, s.stats.wagered || 0], [1000, 0]);
+      const r2 = await start(p, 3);
+      now = T0 + 5000;
+      assert.equal((await status(409, 'crash.cancel', { id: r2.round.id }, p.token)).error, 'started');
+    });
+    it('runs one round per game at a time, and both games side by side', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      assert.equal((await status(409, 'crash.bet', { game: 'rocket', bet: 10, startIn: 0 }, p.token)).error, 'busy');
+      const rug = await T.ok('crash.bet', { game: 'rug', bet: 10, startIn: 0 }, p.token);
+      assert.equal(rug.round.game, 'rug');
+      const path = CrashMath.games.rug.path(rug.round.seed);
+      now = T0 + msTo(1.5, path);
+      const c = await T.ok('crash.cashout', { id: rug.round.id }, p.token);
+      assert.deepEqual([c.round.status, c.round.mult, c.round.paid], ['cashed', 1.5, 15]);
+      now = T0 + 5000 + msTo(3);
+      assert.equal((await T.ok('crash.bet', { game: 'rocket', bet: 10, startIn: 0 }, p.token)).round.id > r.round.id, true, 'the next round can start once the last one is over');
+    });
+    it('only bets coins that are there and not in a trade offer', async () => {
+      const p = await T.player({ coins: 100 });
+      crash.hooks.roll = () => 3; now = T0;
+      assert.equal((await status(409, 'crash.bet', { game: 'rug', bet: 101, startIn: 0 }, p.token)).error, 'coins');
+      const { a, id } = await T.room({ coins: 100 }, {});
+      await T.ok('trade.offer', { id, coins: 80 }, a.token);
+      const no = await status(409, 'crash.bet', { game: 'rug', bet: 21, startIn: 0 }, a.token);
+      assert.deepEqual([no.error, no.coins], ['coins', 20]);
+      await T.ok('crash.bet', { game: 'rug', bet: 20, startIn: 0 }, a.token);
+    });
+    it('refuses nonsense and other players\' rounds', async () => {
+      const p = await T.player({ coins: 100 }), q = await T.player({ coins: 100 });
+      crash.hooks.roll = () => 3; now = T0;
+      for (const bad of [{ game: 'nope', bet: 5 }, { game: 'rug', bet: 0 }, { game: 'rug', bet: 1.5 }, { game: 'rug', bet: '5' }, { game: 'rug', bet: -5 }, { game: 'rug', bet: 5, auto: 1.001 }, { game: 'rug', bet: 5, auto: 501 }]) {
+        await status(400, 'crash.bet', bad, p.token);
+      }
+      assert.equal((await T.stateOf(p)).coins, 100);
+      const r = await T.ok('crash.bet', { game: 'rug', bet: 5, startIn: 0 }, p.token);
+      for (const op of ['crash.cashout', 'crash.cancel', 'crash.wait', 'crash.auto']) await status(404, op, { id: r.round.id, auto: 2 }, q.token);
+      await status(400, 'crash.cashout', { id: 'x' }, p.token);
+      await status(401, 'crash.bet', { game: 'rug', bet: 5 });
+    });
+    it('brings a later save from the page up to date with bet and payout', async () => {
+      const p = await T.player({ coins: 1000 });
+      const r = await start(p, 3);
+      now = T0 + 5000 + msTo(2);
+      await T.ok('crash.cashout', { id: r.round.id }, p.token);
+      // the page never saw the two answers and still holds rev 0 with 1000 coins and a card it pulled meanwhile
+      const s = await T.ok('sync', { rev: 0, state: { coins: 1000, inv: { i17: 1 } } }, p.token);
+      assert.equal(s.rev, 3);
+      assert.deepEqual(s.coins.map((e) => [e.rev, e.coins, e.why]), [[1, -200, 'bet'], [2, 400, 'cashout']]);
+      const st = await T.stateOf(p);
+      assert.deepEqual([st.coins, st.inv], [1200, { i17: 1 }]);
+    });
+    it('still treats a save from another device as a conflict', async () => {
+      const p = await T.player({ coins: 1000 });
+      await T.ok('sync', { rev: 0, state: { coins: 900 } }, p.token);
+      await start(p, 3);
+      const r = await status(409, 'sync', { rev: 0, state: { coins: 5000 } }, p.token);
+      assert.deepEqual([r.error, r.rev, r.state.coins], ['conflict', 2, 700]);
+    });
+    it('answers a waiting page the moment the round ends', async () => {
+      crash.hooks.now = () => Date.now(); crash.hooks.roll = () => 1;
+      const p = await T.player({ coins: 100 });
+      const r = await T.ok('crash.bet', { game: 'rocket', bet: 10, startIn: 400 }, p.token);
+      const t0 = Date.now();
+      const w = await T.ok('crash.wait', { id: r.round.id }, p.token);
+      const took = Date.now() - t0;
+      assert.deepEqual([w.round.status, w.round.crash], ['rugged', 1]);
+      assert.ok(took >= 300 && took < 2500, 'waited ' + took + ' ms');
+      crash.hooks.now = () => now;
+    });
+    it('rolls ends that leave the house 3 percent', () => {
+      const g = CrashMath.games.rocket, n = 200000;
+      let instant = 0, over2 = 0, over10 = 0;
+      for (let i = 0; i < n; i++) { const c = CrashMath.crashPoint((i + 0.5) / n, g.edge, g.max); if (c === 1) instant++; if (c >= 2) over2++; if (c >= 10) over10++; }
+      // 3% end below 1.00, and with those that end before 1.01 it is 1 - 0.97 / 1.01 that show "1.00"
+      assert.ok(Math.abs(instant / n - (1 - 0.97 / 1.01)) < 0.001 && Math.abs(over2 / n - 0.485) < 0.001 && Math.abs(over10 / n - 0.097) < 0.001, [instant / n, over2 / n, over10 / n].join(' '));
+    });
+    it('draws the same Rugpull chart from the same seed, and finds the time of a multiplier', () => {
+      const a = CrashMath.games.rug.path(12345), b = CrashMath.games.rug.path(12345), c = CrashMath.games.rug.path(54321);
+      assert.equal(a.multAt(17.3), b.multAt(17.3));
+      assert.notEqual(a.multAt(17.3), c.multAt(17.3));
+      for (const m of [1.01, 1.5, 2, 7.77, 50, 500]) assert.ok(Math.abs(a.multAt(a.timeAt(m)) - m) < 1e-6 * m, 'rug ' + m);
+      for (const m of [1.01, 2, 10, 1000]) assert.ok(Math.abs(rocket.multAt(rocket.timeAt(m)) - m) < 1e-6 * m, 'rocket ' + m);
+      assert.ok(a.multAt(5) > a.multAt(4.9) && a.multAt(0) === 1);
     });
   });
 });

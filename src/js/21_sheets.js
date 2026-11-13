@@ -39,7 +39,22 @@ var IndexSheet = (function () {
         });
         g.appendChild(list); body.appendChild(g);
       });
-      body.appendChild(el('div', 'note', 'Every chest rolls its rarity first, then one item of that rarity.'));
+      // mutations: the same for every card
+      var mg = el('div', 'ix-group ix-mut');
+      mg.innerHTML = '<div class="ix-head"><span class="nm">MUTATIONS</span><span class="tot">' + fmtPct(MUT_CHANCE) + '<small>of all chests · any card</small></span></div>';
+      var ml = el('div', 'ix-list');
+      MUTATIONS.forEach(function (m) {
+        var have = 0, was = false, tail = '_' + m.key;
+        Object.keys(S.inv).forEach(function (id) { if (id.slice(-tail.length) === tail) have += S.inv[id]; });
+        Object.keys(S.found).forEach(function (id) { if (id.slice(-tail.length) === tail) was = true; });
+        var row = el('div', 'ix-row m-' + m.key);
+        row.innerHTML = '<i class="mdot">' + m.icon + '</i><div class="grow"><div class="nm">' + m.name + '</div><div class="own' + (have ? ' has' : '') + '">' +
+          (have ? 'Owned ×' + have : was ? 'Found before' : 'Not found yet') + '</div></div>' +
+          '<div class="ixp">' + fmtPct(m.chance) + '<small>1 in ' + fmt(Math.round(100 / m.chance)) + ' · worth ×' + m.mult + '</small></div>';
+        ml.appendChild(row);
+      });
+      mg.appendChild(ml); body.appendChild(mg);
+      body.appendChild(el('div', 'note', 'Every chest rolls its rarity first, then one item of that rarity. One chest in ten comes out mutated: the same card, worth more.'));
     });
   }
   return { open: open };

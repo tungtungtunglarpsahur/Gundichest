@@ -30,7 +30,7 @@ function load() {
     return r.body;
   };
   async function reset() {
-    await db.q(`DROP TABLE IF EXISTS gc_trades, gc_sessions, gc_limits, gc_users, gc_meta CASCADE`);
+    await db.q(`DROP TABLE IF EXISTS gc_feed, gc_ledger, gc_rounds, gc_trades, gc_sessions, gc_limits, gc_users, gc_meta CASCADE`);
     await db.end();                      // also forgets that the schema was there
     await db.ensureSchema();
   }

@@ -36,7 +36,7 @@ var ChestView = (function () {
         box.appendChild(bigBtn('fn-grey', 'CLOSE', function () { Sfx.click(); close(); }));
       } else {
         var item = current, row = el('div', 'fn-row');
-        row.appendChild(bigBtn('fn-green', 'SELL +' + fmt(item.sell), function () {
+        row.appendChild(bigBtn('fn-green', 'SELL +' + fmtShort(item.sell), function () {
           var g = Store.sell(item.id, 1);
           if (g) { Sfx.coin(3); UI.toast('<span class="coin-ic sm"></span> +' + fmt(g) + ' for ' + esc(item.name), 'win'); }
           close();
@@ -65,6 +65,7 @@ var ChestView = (function () {
   // How long a pull stays on screen before the next chest: rare pulls get more time, a legendary gets its banner.
   function autoPause(item) {
     var t = RARITY[item.rarity].tier;
+    if (item.mut) t = Math.max(t, item.mut.mult >= 8 ? 3 : 2);     // a mutated card gets a longer look
     // Fast open hurries past the everyday cards but still stops for the big ones
     if (isFast()) return t >= 4 ? 2400 : t === 3 ? 900 : t === 2 ? 320 : 230;
     return t >= 4 ? 4800 : t === 3 ? 2200 : t === 2 ? 1100 : 800;
@@ -169,22 +170,22 @@ var ChestView = (function () {
         }
         record(item, isNew, pullSold, gain); Store.save(); paintBadge();
         if (!fg() && R.tier >= 3) {            // a big pull while another tab is open: say so
-          UI.toast('<i class="rdot" style="--rc:' + R.color + '"></i>' + R.name + ' · ' + esc(shortName(item.name)) + (pullSold ? ' sold +' + fmt(gain) : ' kept'), R.tier >= 4 ? 'win' : '', 3200);
+          UI.toast('<i class="rdot" style="--rc:' + R.color + '"></i>' + R.name + ' · ' + esc(cardName(item)) + (pullSold ? ' sold +' + fmt(gain) : ' kept'), R.tier >= 4 ? 'win' : '', 3200);
           if (R.tier >= 4) Sfx.reveal(R.tier);
         }
       }
     }
     var host = $('#reveal'); host.innerHTML = '';
     var wrap = el('div', 'card-wrap');
-    var card = el('div', 'rcard r-' + item.rarity);
+    var card = el('div', 'rcard r-' + item.rarity + mutCls(item)), M = item.mut;
     // The face is built in pieces that come in one after another once the card has turned (--d = delay in ms):
     // ghost initial, "H. Name" / "F. Name", rarity, chance, worth, then the NEW ribbon and the auto tag.
     var tag = !viaAuto ? '' : pullSold ? '<div class="rtag sold so" style="--d:1000"><span class="coin-ic sm"></span>Sold +' + fmt(gain) + '</div>' : '<div class="rtag kept so" style="--d:1000">Kept</div>';
     card.innerHTML = '<div class="face back"><b>?</b></div>' +
-      '<div class="face front"><div class="art"><div class="ghost">' + esc(initials(item.name)) + '</div>' +
+      '<div class="face front"><div class="art">' + (M ? '<div class="mfx"></div><div class="mrib so" style="--d:420">' + M.icon + ' ' + M.name.toUpperCase() + ' <b>×' + M.mult + '</b></div>' : '') + '<div class="ghost">' + esc(initials(item.name)) + '</div>' +
       '<div class="who st" style="--d:180"><span>' + esc(shortName(item.name)) + '</span></div>' + (isNew ? '<div class="new so" style="--d:1000">NEW</div>' : '') + tag + '</div>' +
       '<div class="info"><div class="st" style="--d:520"><span class="rar">' + R.name.toUpperCase() + '</span></div>' +
-      '<div class="stats"><div class="cell c1 st" style="--d:720"><small>Chance</small><b>' + fmtPct(item.chance) + '</b></div><i class="so" style="--d:720"></i>' +
+      '<div class="stats"><div class="cell c1 st" style="--d:720"><small>Chance</small><b>' + fmtChance(item.chance) + '</b></div><i class="so" style="--d:720"></i>' +
       '<div class="cell st" style="--d:880"><small>Worth</small><b><span class="coin-ic sm"></span>' + fmt(item.sell) + '</b></div></div></div></div>';
     wrap.appendChild(card); host.appendChild(wrap);
     host.classList.toggle('with-banner', item.rarity === 'legendary'); host.classList.toggle('fast', fast); host.classList.add('on');
@@ -201,10 +202,12 @@ var ChestView = (function () {
     function face() {                     // the front comes into view
       if (faced || seq !== revealSeq) return; faced = true;
       if (showCounters) showCounters();
+      if (!demo) Feed.mine(item);                // an epic, a legendary or a rare mutation: everybody hears of it
       if (!fg()) return;
-      Sfx.reveal(R.tier); haptic(R.tier >= 3 ? [30, 40, 60] : 20);
+      Sfx.reveal(R.tier); haptic(R.tier >= 3 || M ? [30, 40, 60] : 20);
       if (sold) Sfx.coin(1);
-      if (R.tier >= 3) flash(R.color, 0.35, 500);
+      if (M) { Sfx.gem(4 + Math.min(18, M.mult)); flash(getComputedStyle(card).getPropertyValue('--m1').trim() || '#ffffff', 0.3, 500); }
+      else if (R.tier >= 3) flash(R.color, 0.35, 500);
     }
     function ready() {
       if (done || seq !== revealSeq) return; done = true; cardFinish = null;
@@ -232,6 +235,7 @@ var ChestView = (function () {
     busy = true; demo = !!isDemo; revealShown = false; revealReady = false; pullSold = false;
     // gems lit on the back of the chest decide this pull (Chest3D.takeSecret); a preview leaves them alone
     current = rollItem(forceRarity || (isDemo ? null : Chest3D.takeSecret()) || undefined);
+    if (!isDemo) current = mutate(current, rollMutation());       // one chest in ten: the same card, mutated
     $('#chestUi').classList.add('hide');
     switches(false);
     hideBanner();

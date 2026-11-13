@@ -115,11 +115,11 @@ var RunSheet = (function () {
       // every card of the run
       body.appendChild(el('div', 'run-h', 'What you got'));
       var list = el('div', '');
-      ITEMS.forEach(function (it) {
+      ALL_CARDS.forEach(function (it) {
         var x = r.items[it.id]; if (!x) return;
         var R = RARITY[it.rarity], last = it.name.split(' ').pop();
-        var row = el('div', 'inv-item r-' + it.rarity, '<div class="av">' + esc(last.charAt(0)) + '</div>' +
-          '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + R.name + '</b><span class="cnt">×' + x.n + '</span></div></div>' +
+        var row = el('div', 'inv-item r-' + it.rarity + mutCls(it), '<div class="av">' + esc(last.charAt(0)) + '</div>' +
+          '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + R.name + '</b>' + mutTag(it) + '<span class="cnt">×' + x.n + '</span></div></div>' +
           '<div class="run-st">' + (x.kept ? '<span class="k">Kept ×' + x.kept + '</span>' : '') + (x.sold ? '<span class="s">Sold ×' + x.sold + ' · +' + fmtShort(x.sold * it.sell) + '</span>' : '') + '</div>');
         row.style.animation = 'none';
         list.appendChild(row);

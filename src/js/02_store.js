@@ -98,9 +98,19 @@ var Store = (function () {
       Object.keys(get.items || {}).forEach(function (id) {
         if (!ITEM_BY_ID[id]) return;
         state.inv[id] = (state.inv[id] || 0) + get.items[id]; state.found[id] = true;
+        if (ITEM_BY_ID[id].base) state.found[ITEM_BY_ID[id].base] = true;
       });
       state.stats.traded = (state.stats.traded || 0) + 1;
       persist(); emit('inv'); emit('coins');
+    },
+    // Books coins the server moved itself: a bet or a payout of Rugpull / Rocket. The server has booked the same.
+    applyCoins: function (e) {
+      var st = state.stats;
+      state.coins = Math.max(0, state.coins + (e.coins || 0));
+      if (e.wager) st.wagered = Math.max(0, (st.wagered || 0) + e.wager);
+      if (e.won) { st.won = (st.won || 0) + e.won; if (e.won > (st.bestWin || 0)) st.bestWin = e.won; }
+      if (e.mult && e.mult > (st.bestMult || 0)) st.bestMult = e.mult;
+      persist(); emit('coins');
     },
 
     // ---- what a trade offer holds back ----
@@ -127,6 +137,7 @@ var Store = (function () {
       state.inv[item.id] = (state.inv[item.id] || 0) + 1;
       var isNew = !state.found[item.id];
       state.found[item.id] = true; state.opened += 1;
+      if (item.base) state.found[item.base] = true;             // a mutated card also counts as its card found
       if (item.rarity === 'legendary') state.stats.legend += 1;
       if (item.rarity === 'epic') state.stats.epic += 1;
       save(); emit('inv'); return isNew;
@@ -135,6 +146,7 @@ var Store = (function () {
     give: function (id, n) {
       var isNew = !state.found[id];
       state.inv[id] = (state.inv[id] || 0) + (n || 1); state.found[id] = true;
+      if (ITEM_BY_ID[id] && ITEM_BY_ID[id].base) state.found[ITEM_BY_ID[id].base] = true;
       save(); emit('inv'); return isNew;
     },
     // Removes cards that are not held by a trade. Returns how many were taken.

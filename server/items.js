@@ -26,6 +26,13 @@ for (let i = 0; i < n; i++) {
   if (!rarity) throw new Error('card ' + id + ' has no rarity');
   ITEMS[id] = { id, rarity, sell: RARITIES[rarity].sell };
 }
+// Mutations: special versions of a card, worth a multiple of it. "i17_gold" is the gold version of i17.
+// src/js/01_data.js has the same list with the chances and the looks.
+const MUTATIONS = { gold: 2, frozen: 3, lava: 3, toxic: 4, candy: 4, halloween: 5, neon: 6, diamond: 8, galaxy: 12, void: 18, rainbow: 30 };
+for (let i = 0; i < n; i++) {
+  const base = ITEMS['i' + i];
+  for (const mut of Object.keys(MUTATIONS)) ITEMS[base.id + '_' + mut] = { id: base.id + '_' + mut, base: base.id, mut, rarity: base.rarity, sell: base.sell * MUTATIONS[mut] };
+}
 const isItem = (id) => Object.prototype.hasOwnProperty.call(ITEMS, id);
 // Worth of one side of a trade in coins.
 function offerValue(offer) {
@@ -34,4 +41,4 @@ function offerValue(offer) {
   for (const id of Object.keys(items)) if (isItem(id)) v += ITEMS[id].sell * Math.max(0, Math.floor(Number(items[id]) || 0));
   return v;
 }
-module.exports = { ITEMS, RARITIES, isItem, offerValue, ITEM_COUNT: n };
+module.exports = { ITEMS, RARITIES, MUTATIONS, isItem, offerValue, ITEM_COUNT: n };

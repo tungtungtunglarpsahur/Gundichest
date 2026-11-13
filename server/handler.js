@@ -4,7 +4,9 @@ const crypto = require('crypto');
 const db = require('./db');
 const auth = require('./auth');
 const trades = require('./trades');
-const { cleanState, applyTrade } = require('./state');
+const crash = require('./crash');
+const { ITEMS, RARITIES, MUTATIONS, isItem } = require('./items');
+const { cleanState, applyTrade, applyCoins } = require('./state');
 const { ApiError, bad, exact, isObj } = require('./util');
 
 const WRONG = 'Wrong username or password.';
@@ -45,9 +47,26 @@ const open = {
     await auth.unlimit('name:' + key);
     if (Math.random() < 0.05) db.q(`DELETE FROM gc_sessions WHERE seen_at < now() - make_interval(days => $1)`, [auth.SESSION_DAYS]).catch(() => {});
     const token = await auth.createSession(rows[0].id);
-    return { ok: true, token, user: publicUser(rows[0]), rev: rows[0].rev, state: cleanState(rows[0].state) };
+    let u = rows[0];
+    if (await crash.settleAll(u.id)) u = (await db.q(`SELECT id, name, rev, state FROM gc_users WHERE id = $1`, [u.id]))[0];     // a round that ended meanwhile
+    return { ok: true, token, user: publicUser(u), rev: u.rev, state: cleanState(u.state) };
   },
 };
+
+// ---- what everybody gets told ---------------------------------------------------------------------------
+// Worth telling: an epic or a legendary, or one of the rarest mutations on any card.
+const announceWorthy = (id) => isItem(id) && (RARITIES[ITEMS[id].rarity].tier >= 3 || (ITEMS[id].mut && MUTATIONS[ITEMS[id].mut] >= 8));
+// since = the last announcement this page has seen; a page that has seen none yet only learns where the list ends
+async function feedSince(me, since) {
+  if (since < 0) {
+    const top = await db.qSafe(`SELECT COALESCE(MAX(id), 0)::float8 AS id FROM gc_feed`);
+    return { feedAt: top[0].id, feed: [] };
+  }
+  const rows = await db.qSafe(`SELECT id::float8 AS id, name, item FROM gc_feed WHERE id > $1 AND user_id <> $2 AND created_at > now() - interval '2 minutes' ORDER BY id LIMIT 6`, [since, me.id]);
+  if (rows.length) return { feedAt: rows[rows.length - 1].id, feed: rows.filter((r) => isItem(r.item)) };
+  const top = await db.qSafe(`SELECT COALESCE(MAX(id), 0)::float8 AS id FROM gc_feed`);          // skip what is too old or my own
+  return { feedAt: Math.max(since, top[0].id), feed: [] };
+}
 
 // ---- for a logged-in player ----------------------------------------------------------------------------
 const authed = {
@@ -58,18 +77,21 @@ const authed = {
 
   // Who am I, and has my saved game changed since the rev I hold?
   async me(me, body) {
-    const out = { ok: true, user: publicUser(me), rev: me.rev };
-    if (exact(body.rev, 0, 2147483647, -1) !== me.rev) {
-      const rows = await db.q(`SELECT state FROM gc_users WHERE id = $1`, [me.id]);
-      out.state = cleanState(rows[0].state);
+    let rev = me.rev;
+    if (await crash.settleAll(me.id)) rev = (await db.q(`SELECT rev FROM gc_users WHERE id = $1`, [me.id]))[0].rev;      // a round that ended meanwhile
+    const out = { ok: true, user: publicUser(me), rev };
+    if (exact(body.rev, 0, 2147483647, -1) !== rev) {
+      const rows = await db.q(`SELECT rev, state FROM gc_users WHERE id = $1`, [me.id]);
+      out.rev = rows[0].rev; out.state = cleanState(rows[0].state);
     }
     return out;
   },
 
   // Stores the game as the page has it. rev is the server rev the page last agreed on:
   //  - same as now: stored, rev + 1
-  //  - behind, and everything in between was a finished trade: the trades are booked on top of what the page
-  //    sent and listed in "trades" so the page books them too
+  //  - behind, and everything in between was the server's own doing (a finished trade, a bet or a payout of
+  //    Rugpull / Rocket): those are booked on top of what the page sent and listed in "trades" and "coins"
+  //    so the page books them too
   //  - anything else (another device saved in between): 409 with the server's copy; the page takes that
   async sync(me, body) {
     if (!isObj(body.state)) throw bad('state', 'Nothing to save.');
@@ -78,23 +100,47 @@ const authed = {
     return db.tx(async (run) => {
       const rows = await run(`SELECT rev, state FROM gc_users WHERE id = $1 FOR UPDATE`, [me.id]);
       const cur = rows[0];
-      let booked = null;
+      let booked = null, coins = null;
       if (base !== cur.rev) {
-        const missed = base >= 0 && base < cur.rev ? await trades.bookedSince(me.id, base, run) : [];
-        if (!missed.length || missed.length !== cur.rev - base) {
+        const behind = base >= 0 && base < cur.rev;
+        const missed = behind ? await trades.bookedSince(me.id, base, run) : [];
+        const moved = behind ? await crash.ledgerSince(me.id, base, run) : [];
+        if (!behind || missed.length + moved.length !== cur.rev - base) {
           return { status: 409, ok: false, error: 'conflict', message: 'Your game was saved from another device. This one now shows the saved game.', rev: cur.rev, state: cleanState(cur.state) };
         }
-        for (const t of missed) applyTrade(incoming, t.give, t.get);
-        booked = missed;
+        const all = missed.map((t) => ({ rev: t.rev, t })).concat(moved.map((e) => ({ rev: e.rev, e }))).sort((x, y) => x.rev - y.rev);
+        for (const x of all) { if (x.t) applyTrade(incoming, x.t.give, x.t.get); else applyCoins(incoming, x.e); }
+        booked = missed; coins = moved;
       }
       const up = await run(`UPDATE gc_users SET state = $2::jsonb, rev = rev + 1 WHERE id = $1 RETURNING rev`, [me.id, JSON.stringify(incoming)]);
       const out = { ok: true, rev: up[0].rev };
-      if (booked) out.trades = booked;
+      if (booked && booked.length) out.trades = booked;
+      if (coins && coins.length) out.coins = coins;
       return out;
     });
   },
 
-  poll: (me, body) => trades.poll(me, body),
+  // The heartbeat: trade requests and the open trade, plus what there is to announce since the last one.
+  async poll(me, body) {
+    const [out, feed] = await Promise.all([trades.poll(me, body), feedSince(me, exact(body.feed, 0, 9007199254740991, -1))]);
+    return Object.assign(out, feed);
+  },
+  // "I pulled this": told to everybody who is online. Only for the big ones, and not in a flood.
+  async announce(me, body) {
+    const item = typeof body.item === 'string' ? body.item : '';
+    if (!announceWorthy(item)) throw bad('item', 'Nothing to announce.');
+    await auth.limit('ann:' + me.id, 8, 60, 'That is a lot of luck for one minute.');
+    await db.q(`INSERT INTO gc_feed (user_id, name, item) VALUES ($1, $2, $3)`, [me.id, me.name, item]);
+    if (Math.random() < 0.05) db.q(`DELETE FROM gc_feed WHERE created_at < now() - interval '1 day'`).catch(() => {});
+    return { ok: true };
+  },
+  // Rugpull and Rocket: every round with a bet is played on the server (see crash.js)
+  'crash.bet': (me, body) => crash.bet(me, body),
+  'crash.cancel': (me, body) => crash.cancel(me, body),
+  'crash.cashout': (me, body) => crash.cashout(me, body),
+  'crash.auto': (me, body) => crash.setAuto(me, body),
+  'crash.wait': (me, body) => crash.wait(me, body),
+  'crash.state': (me) => crash.state(me),
   'users.search': (me, body) => trades.search(me, body),
   'trade.request': async (me, body) => {
     await auth.limit('treq:' + me.id, 40, 300, 'That is a lot of requests. Give it a few minutes.');

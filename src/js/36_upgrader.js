@@ -12,7 +12,7 @@ var Upgrader = (function () {
     if (s.upWin && ITEM_BY_ID[s.upWin]) {
       var it = ITEM_BY_ID[s.upWin]; s.upWin = null;
       Store.give(it.id, 1); s.stats.upWon = (s.stats.upWon || 0) + 1; Store.save();
-      UI.toast('Your last upgrade came through: ' + esc(shortName(it.name)), 'win', 3600);
+      UI.toast('Your last upgrade came through: ' + esc(cardName(it)), 'win', 3600);
     }
   }
   return { chance: chance, settle: settle, EDGE: EDGE, CAP: CAP };
@@ -59,7 +59,7 @@ Games.register({
     function cardHtml(id, n, emptyTop, emptyText) {
       if (!id) return '<span class="up-plus">+</span><span class="up-empty"><b>' + emptyTop + '</b>' + emptyText + '</span>';
       var it = ITEM_BY_ID[id], last = it.name.split(' ').pop();
-      return '<span class="up-art r-' + it.rarity + '"><i>' + esc(last.charAt(0)) + '</i>' + (n > 1 ? '<em>×' + n + '</em>' : '') + '</span>' +
+      return '<span class="up-art r-' + it.rarity + mutCls(it) + '"><i>' + esc(last.charAt(0)) + '</i>' + (n > 1 ? '<em>×' + n + '</em>' : '') + (it.mut ? '<u>' + it.mut.icon + '</u>' : '') + '</span>' +
         '<span class="up-name">' + esc(shortName(it.name)) + '</span><span class="up-val"><span class="coin-ic sm"></span>' + fmtShort(it.sell * (n || 1)) + '</span>';
     }
     function setNeedle(deg) { st.angle = deg; needle.setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)'); }
@@ -127,15 +127,15 @@ Games.register({
         var base = st.inId ? ITEM_BY_ID[st.inId].sell : 0, html = '', n = 0;
         RARITY_ORDER.slice().reverse().forEach(function (k) {
           var R = RARITY[k], tiles = '';
-          ITEMS.forEach(function (it) {
+          (which === 'in' ? ALL_CARDS : ITEMS).forEach(function (it) {            // you can put in a mutated card; targets are the plain ones
             if (it.rarity !== k) return;
             var have = Store.free(it.id), last = it.name.split(' ').pop();
             if (which === 'in' ? (have < 1 || k === 'legendary') : (it.sell <= base || k === 'common')) return;      // nothing is above a legendary
             var on = (which === 'in' ? st.inId : st.outId) === it.id;
             var fresh = which === 'out' && !Store.s.found[it.id];
-            tiles += '<button type="button" class="pk-tile r-' + k + (on ? ' on' : '') + (fresh ? ' dim' : '') + '" data-id="' + it.id + '" style="--i:' + Math.min(n++, 14) + '" aria-label="' + esc(it.name) + '">' +
-              '<span class="pk-art"><i>' + esc(last.charAt(0)) + '</i>' + (which === 'in' ? '<em>×' + have + '</em>' : '') + '</span>' +
-              '<span class="pk-name">' + esc(shortName(it.name)) + '</span>' + (fresh ? '<span class="pk-note">not found yet</span>' : '') + '</button>';
+            tiles += '<button type="button" class="pk-tile r-' + k + mutCls(it) + (on ? ' on' : '') + (fresh ? ' dim' : '') + '" data-id="' + it.id + '" style="--i:' + Math.min(n++, 14) + '" aria-label="' + esc(cardName(it, true)) + '">' +
+              '<span class="pk-art"><i>' + esc(last.charAt(0)) + '</i>' + (which === 'in' ? '<em>×' + have + '</em>' : '') + (it.mut ? '<u>' + it.mut.icon + '</u>' : '') + '</span>' +
+              '<span class="pk-name">' + esc(shortName(it.name)) + '</span>' + (it.mut ? '<span class="pk-note mut">' + it.mut.name + ' ×' + it.mut.mult + '</span>' : '') + (fresh ? '<span class="pk-note">not found yet</span>' : '') + '</button>';
           });
           if (!tiles) return;
           html += '<div class="pk-group r-' + k + '" data-r="' + k + '"><div class="pk-h"><span class="pk-rar">' + R.name + '</span><small><span class="coin-ic sm"></span>' + fmt(R.sell) + '</small>' +
@@ -200,7 +200,7 @@ Games.register({
           S.upWin = null; isNew = Store.give(outId, 1);
           S.stats.upWon = (S.stats.upWon || 0) + 1; Store.save();
           Sfx.win(RARITY[target.rarity].tier >= 3); haptic([30, 40, 70]);
-          UI.toast('<i class="rdot" style="--rc:' + RARITY[target.rarity].color + '"></i>Upgraded to ' + esc(shortName(target.name)) + (isNew ? ' · new' : ''), 'win', 2800);
+          UI.toast('<i class="rdot" style="--rc:' + RARITY[target.rarity].color + '"></i>Upgraded to ' + esc(cardName(target)) + (isNew ? ' · new' : ''), 'win', 2800);
         } else { Sfx.lose(); haptic([50, 30, 80]); }
         stage.className = 'up-stage ' + (win ? 'won' : 'lost');
         pctEl.textContent = win ? 'WIN' : 'MISS'; pctEl.className = 'num ' + (win ? 'w' : 'l');

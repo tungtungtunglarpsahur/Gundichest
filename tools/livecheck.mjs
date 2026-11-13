@@ -64,8 +64,9 @@ try {
       note('Database', `reachable, first round trip ${deep.json.dbMs} ms`);
       // 4. two players, one trade
       const steps = [];
-      await runSmoke(call, (line) => steps.push(line));
-      note('Trade test', `passed (${steps.length} steps): register, login, save, search, request, offers, accept twice each, swap, history, cleanup`);
+      await runSmoke(call, (line) => steps.push(line), { wait: true });
+      const waited = steps.filter((l) => l.includes('waited')).map((l) => l.trim()).join('; ');
+      note('Trade test', `passed (${steps.length} steps): register, login, save, search, request, offers, accept twice each, swap, history, announcement, a round of Rocket on the server${waited ? ' (' + waited + ')' : ''}, cleanup`);
       const times = [];
       for (let i = 0; i < 5; i++) { const s = Date.now(); await get('/api/rpc?deep=1'); times.push(Date.now() - s); }
       note('Speed', `API with database from here: ${times.sort((a, b) => a - b)[2]} ms (median of 5)`);

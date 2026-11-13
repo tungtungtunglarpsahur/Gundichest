@@ -14,6 +14,14 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  // for the browser tests only (this server never runs in production): decide where the next rounds of Rugpull / Rocket end
+  if (url.pathname === '/__test/crash' && req.method === 'POST') {
+    const chunks = []; for await (const c of req) chunks.push(c);
+    const v = Number(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}').roll);
+    require('../server/crash.js').hooks.roll = v >= 1 ? () => v : null;
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}');
+    return;
+  }
   if (url.pathname === '/api/rpc') {
     const chunks = [];
     for await (const c of req) chunks.push(c);

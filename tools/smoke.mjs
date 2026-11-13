@@ -1,8 +1,9 @@
-// One full pass through the API the way two players would use it: register, save, search, trade, clean up.
+// One full pass through the API the way two players would use it: register, save, search, trade, an announcement,
+// a round of Rocket, clean up.
 // call(op, data, token) -> { status, body }. Used by the build check (in process) and the live check (over HTTP).
 import { randomBytes } from 'node:crypto';
 
-export async function runSmoke(call, log = () => {}) {
+export async function runSmoke(call, log = () => {}, opt = {}) {
   const tag = randomBytes(4).toString('hex');
   const A = { name: 'zz_ci_a' + tag, pass: randomBytes(9).toString('base64url') };
   const B = { name: 'zz_ci_b' + tag, pass: randomBytes(9).toString('base64url') };
@@ -71,6 +72,31 @@ export async function runSmoke(call, log = () => {}) {
     eq('cards of the second player', fb.state.inv, { i14: 1, i17: 2 });
     const hist = await must('trade history', 'trade.history', {}, A.token);
     eq('history holds the trade', hist.trades.filter((t) => t.id === T).map((t) => t.status), ['done']);
+
+    // everybody hears of a big pull, nobody of a small one
+    await must('announce a big pull', 'announce', { item: 'i3_gold' }, A.token);
+    const pf = await must('the other player hears of it', 'poll', { feed: pb.feedAt }, B.token);
+    if (!(pf.feed || []).some((f) => f.name === A.name && f.item === 'i3_gold')) throw new Error('announcement missing from the feed');
+    await must('a common is not announced', 'announce', { item: 'i17' }, A.token, 400);
+
+    // one round of Rocket: the server takes the bet, keeps the end to itself and pays by its own clock
+    const bet = await must('bet on a round of Rocket', 'crash.bet', { game: 'rocket', bet: 10, auto: 0, startIn: 0 }, A.token);
+    if ('crash' in bet.round || 'crashIn' in bet.round) throw new Error('the end of a running round was sent to the page');
+    eq('the bet is booked', bet.book.map((e) => e.coins), [-10]);
+    await new Promise((r) => setTimeout(r, 400));
+    const out = await must('cash out', 'crash.cashout', { id: bet.round.id }, A.token);
+    if (out.round.status !== 'cashed' && out.round.status !== 'rugged') throw new Error('round neither paid nor over: ' + out.round.status);
+    const paid = out.round.status === 'cashed' ? out.round.paid : 0;
+    if (opt.wait && (out.round.status === 'rugged' || out.round.crashIn < 12000)) {
+      const w0 = Date.now();
+      const w = await must('the open request answers when the round ends', 'crash.wait', { id: bet.round.id }, A.token);
+      eq('round as the waiting page sees it', [w.round.status, w.round.crash], [out.round.status, out.round.crash]);
+      log('     waited ' + (Date.now() - w0) + ' ms for a round that had ' + Math.max(0, Math.round(out.round.crashIn)) + ' ms to go');
+    }
+    const s3 = await must('a save that missed the round', 'sync', { rev: s2.rev, state: fa.state }, A.token);
+    eq('bet and payout handed back to the page', (s3.coins || []).map((e) => e.coins), paid ? [-10, paid] : [-10]);
+    const fc = await must('first player after the round', 'me', { rev: -1 }, A.token);
+    eq('coins after the round', fc.state.coins, 590 - 10 + paid);
     step = 'clean up';
   } finally {
     for (const u of made) {

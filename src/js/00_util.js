@@ -43,6 +43,8 @@ var fmtPct = function (p) {
   var t = p >= 10 ? p.toFixed(1) : p >= 1 ? p.toFixed(2) : p.toFixed(3);
   return t.replace(/\.?0+$/, '') + '%';
 };
+// a chance in percent; very small ones read better as "1 in 2M"
+var fmtChance = function (p) { return p >= 0.001 ? fmtPct(p) : '1 in ' + fmtShort(Math.round(100 / p)); };
 var el = function (tag, cls, html) {
   var e = document.createElement(tag);
   if (cls) e.className = cls;

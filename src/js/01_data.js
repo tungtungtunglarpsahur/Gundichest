@@ -48,3 +48,42 @@ function rollItem(forceRarity) {
   var pool = ITEMS.filter(function (it) { return it.rarity === key; });
   return pool[randInt(pool.length)];
 }
+
+// Mutations: a card from a chest can come out as a special version of itself, worth a multiple of it.
+// chance is in percent per chest, whatever the card; together one chest in ten. Saved games and trades call the
+// gold Frau Kaese "i17_gold". server/items.js has the same keys and multiples (tests/items.test.js checks).
+var MUTATIONS = [
+  { key: 'gold', name: 'Gold', icon: '✨', chance: 3, mult: 2 },
+  { key: 'frozen', name: 'Frozen', icon: '❄️', chance: 1.5, mult: 3 },
+  { key: 'lava', name: 'Lava', icon: '🌋', chance: 1.5, mult: 3 },
+  { key: 'toxic', name: 'Toxic', icon: '☣️', chance: 1, mult: 4 },
+  { key: 'candy', name: 'Candy', icon: '🍬', chance: 1, mult: 4 },
+  { key: 'halloween', name: 'Halloween', icon: '🎃', chance: 0.8, mult: 5 },
+  { key: 'neon', name: 'Neon', icon: '⚡', chance: 0.5, mult: 6 },
+  { key: 'diamond', name: 'Diamond', icon: '💎', chance: 0.35, mult: 8 },
+  { key: 'galaxy', name: 'Galaxy', icon: '🌌', chance: 0.2, mult: 12 },
+  { key: 'void', name: 'Void', icon: '🕳️', chance: 0.1, mult: 18 },
+  { key: 'rainbow', name: 'Rainbow', icon: '🌈', chance: 0.05, mult: 30 }
+];
+var MUT_BY_KEY = {}, MUT_CHANCE = 0;
+MUTATIONS.forEach(function (m) { MUT_BY_KEY[m.key] = m; MUT_CHANCE += m.chance; });
+// Every card there is: the 26, each followed by its mutated versions. ITEMS stays the list of the 26.
+var ALL_CARDS = [];
+ITEMS.forEach(function (it) {
+  ALL_CARDS.push(it);
+  MUTATIONS.forEach(function (m) {
+    var v = { id: it.id + '_' + m.key, base: it.id, name: it.name, rarity: it.rarity, mut: m, sell: it.sell * m.mult, chance: it.chance * m.chance / 100 };
+    ITEM_BY_ID[v.id] = v; ALL_CARDS.push(v);
+  });
+});
+// The mutation roll of one chest: null nine times out of ten. A roll near 0 is the rarest one.
+function rollMutation() {
+  var r = rand() * 100, acc = 0;
+  for (var i = MUTATIONS.length - 1; i >= 0; i--) { acc += MUTATIONS[i].chance; if (r < acc) return MUTATIONS[i]; }
+  return null;
+}
+function mutate(item, m) { return m && !item.mut ? ITEM_BY_ID[item.id + '_' + m.key] : item; }
+// "Gold F. Kaese" (long: "Gold Frau Kaese")
+function cardName(it, long) { return (it.mut ? it.mut.name + ' ' : '') + (long ? it.name : shortName(it.name)); }
+function mutTag(it) { return it.mut ? '<span class="mtag m-' + it.mut.key + '">' + it.mut.icon + ' ' + it.mut.name + '</span>' : ''; }
+function mutCls(it) { return it.mut ? ' mut m-' + it.mut.key : ''; }

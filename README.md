@@ -1,14 +1,17 @@
 # GundiChest
 
-A chest opening game for the browser: a 3D treasure chest, 26 cards in five rarities, an inventory, six
-play-coin games, and trading between players. Built for phones first.
+A chest opening game for the browser: a 3D treasure chest, 26 cards in five rarities and eleven mutations,
+an inventory, seven play-coin games, and trading between players. Built for phones first.
 
 Play coins only. Nothing in the game costs or pays real money.
 
 - **Chest**: open by hand, or let auto opening run with rules for what to keep and what to sell.
 - **Index**: every card with its drop chance.
-- **Games**: Rugpull, Chicken Road, Mines, Blackjack, Coinflip and the Upgrader (trade cards up for a
-  card worth more, at a chance you can see before you spin).
+- **Games**: Rugpull, Rocket, Chicken Road, Mines, Blackjack, Coinflip and the Upgrader (trade cards up
+  for a card worth more, at a chance you can see before you spin). Rugpull and Rocket are played on the
+  server: it takes the bet, rolls where the round ends and pays the cash-out.
+- **Announcements**: an epic, a legendary or a rare mutation is told to everybody who is online:
+  "Mia got Frau Hübner in Epic!".
 - **Trade**: find a player, send a request, put cards and coins on the table. Both accept, then both
   confirm; only then everything changes hands at once. Each side sees how fair the trade is for them.
 - **Accounts**: username and password. Progress is saved to the account and follows it to other devices.
@@ -24,6 +27,31 @@ Play coins only. Nothing in the game costs or pays real money.
 | Legendary | 0.1%      | 3     | 10,000    |
 
 A chest rolls the rarity first, then one card of that rarity. The table lives in `src/js/01_data.js`.
+
+### Mutations
+
+One chest in ten gives its card in a special finish, worth a multiple of the card. The roll is the same
+for every card.
+
+| Mutation  | Per chest | Worth |
+|-----------|-----------|-------|
+| Gold      | 3%        | ×2    |
+| Frozen    | 1.5%      | ×3    |
+| Lava      | 1.5%      | ×3    |
+| Toxic     | 1%        | ×4    |
+| Candy     | 1%        | ×4    |
+| Halloween | 0.8%      | ×5    |
+| Neon      | 0.5%      | ×6    |
+| Diamond   | 0.35%     | ×8    |
+| Galaxy    | 0.2%      | ×12   |
+| Void      | 0.1%      | ×18   |
+| Rainbow   | 0.05%     | ×30   |
+
+A mutated card is its own card in the inventory, in trades and in the Upgrader (`i17_gold` is the gold
+version of `i17`). Auto opening never sells a mutated card.
+
+Rugpull and Rocket: a round ends at 0.97 ÷ (1 − u) for a uniform u, so a cash-out at any multiplier pays
+back 97% on average; about 4 rounds in 100 end at 1.00×.
 
 Upgrader: chance = 95% × (value you put in ÷ value of the target), never more than 90%.
 
@@ -93,7 +121,8 @@ src/logo.svg                      the logo; favicon and the mark inside the page
 public/assets/                    chest model, textures, three.js (served as files, cached for a year)
 public/*.png, favicon.ico         app icons, made from the logo by tools/make-icons.py
 api/rpc.js                        the serverless function; hands every request to server/handler.js
-server/                           accounts, saved games, trading (Node, pg)
+server/                           accounts, saved games, trading, Rugpull and Rocket (Node, pg)
+server/crashmath.js               the curves of Rugpull and Rocket; the build puts the same file into the page
 tools/build.mjs                   builds public/index.html or the single-file version
 tools/dev-server.mjs              local stand-in for Vercel
 tools/dbcheck.mjs, smoke.mjs      the build-time database check
@@ -116,10 +145,23 @@ confirm runs one database transaction that locks both players, checks that each 
 offered, moves everything and marks the trade done. Cards and coins in an open offer are held back in the
 rest of the game: they cannot be sold, bet or upgraded until the trade ends.
 
+### Rugpull and Rocket
+
+A round with a bet on it lives on the server (`server/crash.js`, table `gc_rounds`). The page sends the bet;
+the server takes the coins from its copy of the saved game, rolls where the round ends and when it starts,
+and answers with the round's seed, never with its end. The page draws the curve from the seed with the same
+code the server uses. A cash-out is a request, and it pays the multiplier of the server's clock at the moment
+it arrives; an auto cash-out is stored with the round and paid even if the page is closed. The page hears of
+the end through a request the server keeps open until the round is over. Every coin the server moves is
+noted with the player's revision (`gc_ledger`), so a save from the page that missed it is brought up to date
+the same way as after a trade. Rounds nobody bet on, and the single-file version, are rolled in the browser.
+
 ### What the server does not do
 
-The chest, the games and the Upgrader run in the browser, and the server stores what the browser reports.
-Someone who knows their way around browser tools can give themselves coins or cards. Passwords are stored
+The chest, the other games and the Upgrader run in the browser, and the server stores what the browser
+reports. Someone who knows their way around browser tools can give themselves coins or cards; that Rugpull
+and Rocket are decided on the server does not change this. The same goes for the hidden gem combination on
+the back of the chest: it is in this repository for anyone to read. Passwords are stored
 as salted scrypt hashes, sessions as hashes of random tokens; there is no email and no password reset.
 
 ## Credits

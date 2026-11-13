@@ -22,7 +22,8 @@ const fonts = [
 css = css.replace('/*{{FONTS}}*/', fonts.join('\n'));
 
 const files = readdirSync(join(ROOT, 'src/js')).filter((f) => f.endsWith('.js')).sort();
-let js = "(function(){\n'use strict';\n" + files.map((f) => `// ---- ${f}\n${read('src/js/' + f)}`).join('\n') + '\n})();\n';
+// server/crashmath.js is shared: the page draws Rugpull and Rocket with the same curve the server pays by
+let js = "(function(){\n'use strict';\n" + `// ---- server/crashmath.js\n${read('server/crashmath.js')}\n` + files.map((f) => `// ---- ${f}\n${read('src/js/' + f)}`).join('\n') + '\n})();\n';
 if (/<\/script/i.test(js)) throw new Error('script close tag inside the JS bundle');
 
 // The logo is drawn once (src/logo.svg) and used as the favicon and, as a symbol, inside the page.

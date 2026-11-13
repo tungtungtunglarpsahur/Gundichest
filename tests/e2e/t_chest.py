@@ -12,7 +12,7 @@ def drive(pg):
     ev = pg.evaluate
     def sim(sec, fps=30):          # the chest animation, stepped by hand (a real frame takes most of a second here)
         ev('(a) => { const C = window.__GC.chest; for (let i = 0; i < a[0]; i++) { C.time += 1/a[1]; C.applyPose(1/a[1]); } C.renderFrame(); }', [int(round(sec * fps)), fps])
-    def rig(q):                    # every chest takes two random numbers: the rarity, then the card inside it
+    def rig(q):                    # every chest takes three random numbers: the rarity, the card inside it, the mutation (0.9 = none)
         ev('(q) => { let i = 0; crypto.getRandomValues = (a) => { for (let k = 0; k < a.length; k++) { a[k] = Math.floor(q[i % q.length] * 4294967296); i++; } return a; }; }', q)
     def look():
         return ev("""() => {
@@ -37,7 +37,7 @@ with sync_playwright() as p:
         c.ok(not home['away'] and not home['dockAuto'] and home['switches']['bottom'] <= home['buttons']['top'] + 1, size + ' idle: the switches sit above the big buttons')
 
         # ---- a chest opened by hand: the switches step aside, the card stays clear of the buttons
-        rig([0.05, 0.0])               # a rare
+        rig([0.05, 0.0, 0.9])          # a rare
         pg.click('#btnOpen'); pg.wait_for_timeout(350)
         c.ok(look()['away'] and look()['opacity'] < 0.1, size + ' by hand: the switches are out of the way while the chest opens')
         sim(6.0); pg.wait_for_timeout(3200); sim(0.3)
@@ -52,7 +52,7 @@ with sync_playwright() as p:
 
         # ---- auto opening: the switches move to the bottom
         pg.click('#autoPill'); pg.wait_for_selector('.sheet.on #autoStart'); pg.click('.as-presets .chip:nth-child(2)'); pg.wait_for_timeout(150)      # sell commons
-        rig([0.9, 0.0])                # a common: sold by the rule
+        rig([0.9, 0.0, 0.9])           # a common: sold by the rule
         pg.click('#autoStart'); pg.wait_for_timeout(700); sim(0.3)
         a = look()
         c.ok(a['dockAuto'] and not a['away'] and a['opacity'] > 0.9, size + ' auto: the switches stay visible')
@@ -85,7 +85,7 @@ with sync_playwright() as p:
     sim, rig, look = drive(pg)
     pg.wait_for_timeout(200); sim(0.2)
     pg.click('#autoPill'); pg.wait_for_selector('.sheet.on #autoStart'); pg.click('.as-presets .chip:nth-child(1)'); pg.wait_for_timeout(150)          # keep everything
-    rig([0.004, 0.0])                  # an epic
+    rig([0.004, 0.0, 0.9])             # an epic
     pg.click('#autoStart'); pg.wait_for_timeout(600)
     sim(2.6)
     back = look()

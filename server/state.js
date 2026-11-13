@@ -53,4 +53,14 @@ function applyTrade(state, give, get) {
   return state;
 }
 
-module.exports = { cleanState, cleanOffer, sameOffer, isEmptyOffer, covers, applyTrade, STAT_KEYS };
+// Books coins the server moved itself (a bet, a payout): {coins: -50, wager: 50} or {coins: 120, won: 120, mult: 2.4}.
+function applyCoins(state, e) {
+  state.coins = Math.min(MAX_COINS, Math.max(0, (state.coins || 0) + (e.coins || 0)));
+  const st = state.stats || (state.stats = {});
+  if (e.wager) st.wagered = Math.max(0, (st.wagered || 0) + e.wager);
+  if (e.won) { st.won = (st.won || 0) + e.won; if (e.won > (st.bestWin || 0)) st.bestWin = e.won; }
+  if (e.mult && e.mult > (st.bestMult || 0)) st.bestMult = e.mult;
+  return state;
+}
+
+module.exports = { cleanState, cleanOffer, sameOffer, isEmptyOffer, covers, applyTrade, applyCoins, STAT_KEYS, MAX_COINS };
