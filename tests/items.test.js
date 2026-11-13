@@ -25,6 +25,27 @@ test('server and game agree on every card and its value', () => {
   assert.equal(server.isItem('i25'), false);
 });
 
+test('cards keep their ids', () => {
+  const { ITEMS } = clientData();
+  const byId = Object.fromEntries(ITEMS.map((it) => [it.id, it]));
+  assert.equal(Object.keys(byId).length, 25);                         // no id used twice
+  for (let i = 0; i < 25; i++) assert.ok(byId['i' + i], 'i' + i);
+  // saved games and trades hold these ids: the card behind an id must never become another card
+  const fixed = { i0: 'Frau Vogtmann', i1: 'Herr Lein', i2: 'Frau Zapf', i3: 'Frau Ullmann', i4: 'Herr Schreivogel', i7: 'Frau Masi', i13: 'Herr Sieder',
+    i14: 'Herr Reuther', i16: 'Frau Geuß', i17: 'Frau Kaese', i20: 'Herr Franke', i21: 'Herr Lang', i22: 'Frau Ploß', i24: 'Herr Bäumler' };
+  for (const id of Object.keys(fixed)) assert.equal(byId[id].name, fixed[id], id);
+  assert.equal(byId.i21.rarity, 'rare');
+  assert.equal(server.ITEMS.i21.sell, 100);
+  assert.deepEqual(Object.keys(server.ITEMS), Array.from({ length: 25 }, (_, i) => 'i' + i));
+});
+
+test('cards are listed by rarity', () => {
+  const { ITEMS, RARITY, RARITY_ORDER } = clientData();
+  const tiers = ITEMS.map((it) => RARITY[it.rarity].tier);
+  assert.deepEqual(tiers.slice().sort((a, b) => b - a), tiers);
+  assert.deepEqual(Array.from(RARITY_ORDER, (k) => ITEMS.filter((it) => it.rarity === k).length), [3, 4, 8, 3, 7]);
+});
+
 test('drop chances add up to 100% and follow the rarity order', () => {
   const { RARITY, RARITY_ORDER, ITEMS } = clientData();
   const total = RARITY_ORDER.reduce((s, k) => s + RARITY[k].chance, 0);

@@ -33,7 +33,7 @@ with sync_playwright() as p:
     # --- choose the target: only cards worth more, each with its chance
     pg.click('#upOut'); pg.wait_for_selector('.sheet.on')
     tiles = pg.evaluate("[...document.querySelectorAll('.sheet.on button[data-id]')].length")
-    c.eq(tiles, 17, 'every card above a common can be the target (17)')
+    c.eq(tiles, 18, 'every card above a common can be the target (18)')
     odds = dict(pg.evaluate("[...document.querySelectorAll('.sheet.on .pk-group')].map(g => [g.dataset.r, g.querySelector('.pk-odds').textContent])"))
     c.eq(list(odds.keys()), ['uncommon', 'rare', 'epic', 'legendary'], 'targets are grouped by rarity, the nearest first')
     c.eq(odds['uncommon'], '38%', 'common to uncommon: 95% of 10/25 = 38%')

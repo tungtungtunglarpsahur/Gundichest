@@ -149,7 +149,7 @@ var ChestView = (function () {
     wrap.appendChild(card); host.appendChild(wrap);
     host.classList.toggle('with-banner', item.rarity === 'legendary'); host.classList.toggle('fast', fast); host.classList.add('on');
     card.style.setProperty('--cw', (card.offsetWidth || 250) + 'px');      // type on the card scales with the card
-    // long names shrink until "H. Schreibvogel" fits on one line
+    // long names shrink until "H. Weber-Hänel" fits on one line
     var who = card.querySelector('.who span'), room = card.querySelector('.art').clientWidth - 26;
     if (who && room > 40 && who.offsetWidth > room) {
       who.style.fontSize = Math.max(15, Math.floor(parseFloat(getComputedStyle(who).fontSize) * room / who.offsetWidth)) + 'px';

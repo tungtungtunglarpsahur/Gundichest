@@ -17,9 +17,9 @@ Play coins only. Nothing in the game costs or pays real money.
 
 | Rarity    | Per chest | Cards | Sells for |
 |-----------|-----------|-------|-----------|
-| Common    | 63.2%     | 8     | 10        |
+| Common    | 63.2%     | 7     | 10        |
 | Uncommon  | 22%       | 3     | 25        |
-| Rare      | 14%       | 7     | 100       |
+| Rare      | 14%       | 8     | 100       |
 | Epic      | 0.5%      | 4     | 1,500     |
 | Legendary | 0.3%      | 3     | 10,000    |
 

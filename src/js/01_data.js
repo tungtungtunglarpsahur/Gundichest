@@ -8,13 +8,16 @@ var RARITY = {
   legendary: { key: 'legendary', name: 'Legendary', color: '#ffc531', deep: '#c47a00', chance: 0.3, sell: 10000, tier: 4 }
 };
 var RARITY_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
+// Every card has a fixed id. Saved games and trades refer to cards by it, so an id never moves to another card,
+// whatever happens to a name or a rarity (Herr Lang, i21, started out as a common). The order here is the order
+// cards are listed in: by rarity.
 var ITEMS = [
-  ['Frau Vogtmann', 'legendary'], ['Herr Lein', 'legendary'], ['Frau Zapf', 'legendary'],
-  ['Frau Ullmann', 'epic'], ['Herr Schreibvogel', 'epic'], ['Frau Duppel', 'epic'], ['Herr Gallert', 'epic'],
-  ['Frau Masi', 'rare'], ['Herr Weber-Hänel', 'rare'], ['Frau Wunder', 'rare'], ['Frau Butterhof', 'rare'], ['Herr Gessner', 'rare'], ['Herr Kühl', 'rare'], ['Herr Sieder', 'rare'],
-  ['Herr Reuther', 'uncommon'], ['Frau Köhler', 'uncommon'], ['Frau Geuß', 'uncommon'],
-  ['Frau Kaese', 'common'], ['Frau Benker', 'common'], ['Frau Peinl', 'common'], ['Herr Franke', 'common'], ['Herr Lang', 'common'], ['Frau Ploß', 'common'], ['Frau Beier', 'common'], ['Herr Bäumler', 'common']
-].map(function (d, i) { return { id: 'i' + i, name: d[0], rarity: d[1] }; });
+  ['i0', 'Frau Vogtmann', 'legendary'], ['i1', 'Herr Lein', 'legendary'], ['i2', 'Frau Zapf', 'legendary'],
+  ['i3', 'Frau Ullmann', 'epic'], ['i4', 'Herr Schreivogel', 'epic'], ['i5', 'Frau Duppel', 'epic'], ['i6', 'Herr Gallert', 'epic'],
+  ['i7', 'Frau Masi', 'rare'], ['i8', 'Herr Weber-Hänel', 'rare'], ['i9', 'Frau Wunder', 'rare'], ['i10', 'Frau Butterhof', 'rare'], ['i11', 'Herr Gessner', 'rare'], ['i12', 'Herr Kühl', 'rare'], ['i13', 'Herr Sieder', 'rare'], ['i21', 'Herr Lang', 'rare'],
+  ['i14', 'Herr Reuther', 'uncommon'], ['i15', 'Frau Köhler', 'uncommon'], ['i16', 'Frau Geuß', 'uncommon'],
+  ['i17', 'Frau Kaese', 'common'], ['i18', 'Frau Benker', 'common'], ['i19', 'Frau Peinl', 'common'], ['i20', 'Herr Franke', 'common'], ['i22', 'Frau Ploß', 'common'], ['i23', 'Frau Beier', 'common'], ['i24', 'Herr Bäumler', 'common']
+].map(function (d) { return { id: d[0], name: d[1], rarity: d[2] }; });
 var ITEM_BY_ID = {};
 // "Herr Lein" -> "H. Lein", "Frau Vogtmann" -> "F. Vogtmann": the form shown on the card
 function shortName(name) {
