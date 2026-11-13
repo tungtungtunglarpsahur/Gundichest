@@ -97,6 +97,16 @@ export async function runSmoke(call, log = () => {}, opt = {}) {
     eq('bet and payout handed back to the page', (s3.coins || []).map((e) => e.coins), paid ? [-10, paid] : [-10]);
     const fc = await must('first player after the round', 'me', { rev: -1 }, A.token);
     eq('coins after the round', fc.state.coins, 590 - 10 + paid);
+    if (opt.wait) {
+      // with a bet in play the server keeps the request open until the round is over (15 s at most per request)
+      const b2 = await must('bet on a round of Rugpull', 'crash.bet', { game: 'rug', bet: 1, auto: 0, startIn: 1500 }, A.token);
+      const h0 = Date.now();
+      const h = await must('the server keeps a request open while the round runs', 'crash.wait', { id: b2.round.id }, A.token);
+      const held = Date.now() - h0;
+      if (held < 1200) throw new Error('the open request came back after ' + held + ' ms, before the round had even started');
+      if (!h.live && h.round.status !== 'rugged') throw new Error('the open request came back with a round that is ' + h.round.status);
+      log('     kept open for ' + held + ' ms, ' + (h.live ? 'round still running' : 'until the round ended at ' + h.round.crash + '×'));
+    }
     step = 'clean up';
   } finally {
     for (const u of made) {

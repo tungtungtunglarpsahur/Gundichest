@@ -8,6 +8,10 @@ var ChestView = (function () {
   var showCounters = null;    // set while a card is face down: lets the coin counter and inventory badge catch up
 
   function isFast() { return !!Store.s.settings.fast; }
+  // Epics, legendaries and every mutated card take their time: Fast open does not hurry them (the chest opens and
+  // the card turns at the normal pace), and auto opening stays on them for a good while.
+  function special(item) { return !!item && (RARITY[item.rarity].tier >= 3 || !!item.mut); }
+  function quick(item) { return isFast() && !special(item); }
   function fg() { return UI.view === 'chest'; }       // sounds, flashes and buzzes only while the chest is on screen
   function flash(color, strength, ms) {
     var f = $('#flash');
@@ -65,10 +69,12 @@ var ChestView = (function () {
   // How long a pull stays on screen before the next chest: rare pulls get more time, a legendary gets its banner.
   function autoPause(item) {
     var t = RARITY[item.rarity].tier;
-    if (item.mut) t = Math.max(t, item.mut.mult >= 8 ? 3 : 2);     // a mutated card gets a longer look
-    // Fast open hurries past the everyday cards but still stops for the big ones
-    if (isFast()) return t >= 4 ? 2400 : t === 3 ? 900 : t === 2 ? 320 : 230;
-    return t >= 4 ? 4800 : t === 3 ? 2200 : t === 2 ? 1100 : 800;
+    // the big ones leave plenty of time to look, with Fast open as well
+    if (t >= 4) return 9000;
+    if (t === 3) return 6500;
+    if (item.mut) return item.mut.mult >= 8 ? 6500 : 4500;
+    if (isFast()) return t === 2 ? 320 : 230;
+    return t === 2 ? 1100 : 800;
   }
   function bar(ms) {            // thin line in the auto row that fills until the next chest
     var b = $('#autoBar'); if (!b) return;
@@ -151,7 +157,7 @@ var ChestView = (function () {
 
   function showReveal(item) {
     if (revealShown) return; revealShown = true;
-    var seq = ++revealSeq, fast = isFast();
+    var seq = ++revealSeq, fast = quick(item);
     var R = RARITY[item.rarity], isNew = false, viaAuto = auto && !demo, gain = 0;
     pullSold = false;
     if (!demo) {
@@ -242,7 +248,7 @@ var ChestView = (function () {
     if (fg()) { Sfx.unlock(); Sfx.click(); Sfx.rattle(0.8 + RARITY[current.rarity].tier * 0.08); }
     clearTimeout(skipTimer);
     skipTimer = setTimeout(function () { if (busy && !revealShown) $('#skipHint').classList.add('on'); }, 900);
-    Chest3D.playOpen(current.rarity, { fast: isFast() });
+    Chest3D.playOpen(current.rarity, { fast: quick(current) });
   }
   function close() {
     revealSeq++; revealReady = false; cardFinish = null; clearTimeout(autoTimer); bar(0);
@@ -251,7 +257,7 @@ var ChestView = (function () {
     $('#skipHint').classList.remove('on');
     $('#chestUi').classList.add('hide');
     hideBanner();
-    return Chest3D.reset(false, isFast()).then(function () {
+    return Chest3D.reset(false, current ? quick(current) : isFast()).then(function () {
       busy = false; current = null; pullSold = false; setButtons('home');
       if (auto) open();
     });
@@ -269,7 +275,7 @@ var ChestView = (function () {
       if (auto) setAuto(false); else AutoSheet.open(function () { setAuto(true); });
     });
     onTap($('#fastPill'), function () { Sfx.unlock(); Sfx.click(); haptic(15); Store.set('fast', !isFast()); });
-    Store.on(function (what) { if (what === 'settings') { paintToggles(); Chest3D.setFast(isFast()); } });
+    Store.on(function (what) { if (what === 'settings') { paintToggles(); Chest3D.setFast(busy && current ? quick(current) : isFast()); } });
     paintToggles();
     fix(); window.addEventListener('resize', function () { if (!busy) fix(); fitCard(); });
     onTap($('#btnOpen'), function () { open(); });
@@ -303,5 +309,5 @@ var ChestView = (function () {
       if (v === 'chest') { Chest3D.resize(); fitCard(); }
     });
   }
-  return { init: init, open: open, close: close, setAuto: setAuto, fit: fitCard, get busy() { return busy; }, get auto() { return auto; }, get run() { return run; } };
+  return { init: init, open: open, close: close, setAuto: setAuto, fit: fitCard, pause: autoPause, get busy() { return busy; }, get auto() { return auto; }, get run() { return run; } };
 })();
