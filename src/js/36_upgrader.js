@@ -23,10 +23,12 @@ Games.register({
   mount: function (pane) {
     var R = 84, C = 2 * Math.PI * R;
     var st = { inId: null, qty: 1, outId: null, busy: false, angle: 0, last: null };
+    var shownP = 0, pctAnim = 0;
     pane.innerHTML =
       '<div class="up-stage" id="upStage">' +
         '<button type="button" class="up-card" id="upIn" aria-label="Choose your card"></button>' +
         '<div class="up-ring">' +
+          '<i class="up-pulse" aria-hidden="true"></i>' +
           '<svg viewBox="0 0 200 200" aria-hidden="true">' +
             '<defs><linearGradient id="upArcG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7dffb0"/><stop offset="1" stop-color="#18c964"/></linearGradient></defs>' +
             '<circle cx="100" cy="100" r="' + R + '" class="up-track"/>' +
@@ -61,6 +63,18 @@ Games.register({
         '<span class="up-name">' + esc(shortName(it.name)) + '</span><span class="up-val"><span class="coin-ic sm"></span>' + fmtShort(it.sell * (n || 1)) + '</span>';
     }
     function setNeedle(deg) { st.angle = deg; needle.setAttribute('transform', 'rotate(' + deg.toFixed(2) + ' 100 100)'); }
+    // the number in the ring counts to its new value instead of jumping
+    function showPct(p) {
+      cancelAnimationFrame(pctAnim);
+      var from = shownP, t0 = performance.now(), dur = reducedMotion || Math.abs(p - from) < 0.0005 ? 0 : 380;
+      (function step(now) {
+        var k = dur ? sat((now - t0) / dur) : 1;
+        shownP = from + (p - from) * ease.outCubic(k);
+        pctEl.textContent = shownP > 0 ? fmtPct(shownP * 100) : '0%';
+        if (k < 1) pctAnim = requestAnimationFrame(step); else { shownP = p; pctEl.textContent = p ? fmtPct(p * 100) : '0%'; }
+      })(t0);
+    }
+    function pop(node) { node.classList.remove('pop'); void node.offsetWidth; node.classList.add('pop'); }
     function paint() {
       if (!st.busy) {
         // keep the choice valid: the card may have been sold or put into a trade meanwhile.
@@ -70,11 +84,21 @@ Games.register({
         st.qty = Math.max(1, Math.min(st.qty, maxQty()));
       }
       var p = odds(), inEl = $('#upIn', pane), outEl = $('#upOut', pane);
-      inEl.innerHTML = cardHtml(st.inId, st.qty, 'Your card', 'Tap to choose'); inEl.className = 'up-card' + (st.inId ? ' set r-' + ITEM_BY_ID[st.inId].rarity : '');
-      outEl.innerHTML = cardHtml(st.outId, 1, 'Target', 'Tap to choose'); outEl.className = 'up-card' + (st.outId ? ' set r-' + ITEM_BY_ID[st.outId].rarity : '');
+      var inKey = (st.inId || '') + ':' + st.qty, outKey = st.outId || '';
+      if (inEl.dataset.key !== inKey) {
+        var swapped = (inEl.dataset.key || ':').split(':')[0] !== (st.inId || '');
+        inEl.dataset.key = inKey; inEl.innerHTML = cardHtml(st.inId, st.qty, 'Your card', 'Tap to choose');
+        if (swapped && st.inId) pop(inEl);
+      }
+      if (outEl.dataset.key !== outKey) {
+        outEl.dataset.key = outKey; outEl.innerHTML = cardHtml(st.outId, 1, 'Target', 'Tap to choose');
+        if (st.outId) pop(outEl);
+      }
+      inEl.className = 'up-card' + (st.inId ? ' set r-' + ITEM_BY_ID[st.inId].rarity : '') + (inEl.classList.contains('pop') ? ' pop' : '');
+      outEl.className = 'up-card' + (st.outId ? ' set r-' + ITEM_BY_ID[st.outId].rarity : '') + (outEl.classList.contains('pop') ? ' pop' : '');
       arc.setAttribute('stroke-dasharray', (C * p).toFixed(2) + ' ' + C.toFixed(2));
       if (!st.busy) {
-        pctEl.textContent = p ? fmtPct(p * 100) : '0%';
+        showPct(p);
         subEl.textContent = !st.inId ? 'pick your card' : !st.outId ? 'pick a target' : 'chance';
         pctEl.className = 'num';
       }
@@ -94,46 +118,55 @@ Games.register({
       var s = Store.s.stats;
       $('#upWon', pane).textContent = fmt(s.upWon || 0) + ' / ' + fmt(s.upTried || 0);
     }
+    // The sheet for choosing a card: tiles grouped by rarity, cheapest first. which = 'in' (a card you own) or
+    // 'out' (the card you want). For the target each rarity shows the chance with what is put in right now.
     function pick(which) {
       if (st.busy) return;
+      var chosen = false;
       UI.sheet(which === 'in' ? 'Your card' : 'Upgrade to', function (body, close) {
-        var html = '', any = false;
-        ITEMS.forEach(function (it) {
-          var have = Store.free(it.id), row = '';
-          if (which === 'in') {
-            if (have < 1) return;
-            if (it.rarity === 'legendary') return;                       // nothing is worth more than a legendary
-            row = '<span class="cnt">×' + have + '</span>';
-          } else {
-            var base = st.inId ? ITEM_BY_ID[st.inId].sell : 0;
-            if (it.sell <= base || it.rarity === 'common') return;
-            row = st.inId ? '<span class="up-odds">' + fmtPct(Upgrader.chance(base * st.qty, it.sell) * 100) + '</span>' : '';
-          }
-          any = true;
-          var last = it.name.split(' ').pop(), on = (which === 'in' ? st.inId : st.outId) === it.id;
-          html += '<button type="button" class="inv-item r-' + it.rarity + (on ? ' picked' : '') + '" data-id="' + it.id + '" style="animation:none;width:100%;text-align:left"><div class="av">' + esc(last.charAt(0)) + '</div>' +
-            '<div class="grow"><div class="nm">' + esc(it.name) + '</div><div class="meta"><b>' + RARITY[it.rarity].name + '</b><span class="worth"><span class="coin-ic sm"></span>' + fmt(it.sell) + '</span>' +
-            (which === 'out' && !Store.s.found[it.id] ? '<span>not found yet</span>' : '') + '</div></div>' + row + '</button>';
+        var base = st.inId ? ITEM_BY_ID[st.inId].sell : 0, html = '', n = 0;
+        RARITY_ORDER.slice().reverse().forEach(function (k) {
+          var R = RARITY[k], tiles = '';
+          ITEMS.forEach(function (it) {
+            if (it.rarity !== k) return;
+            var have = Store.free(it.id), last = it.name.split(' ').pop();
+            if (which === 'in' ? (have < 1 || k === 'legendary') : (it.sell <= base || k === 'common')) return;      // nothing is above a legendary
+            var on = (which === 'in' ? st.inId : st.outId) === it.id;
+            var fresh = which === 'out' && !Store.s.found[it.id];
+            tiles += '<button type="button" class="pk-tile r-' + k + (on ? ' on' : '') + (fresh ? ' dim' : '') + '" data-id="' + it.id + '" style="--i:' + Math.min(n++, 14) + '" aria-label="' + esc(it.name) + '">' +
+              '<span class="pk-art"><i>' + esc(last.charAt(0)) + '</i>' + (which === 'in' ? '<em>×' + have + '</em>' : '') + '</span>' +
+              '<span class="pk-name">' + esc(shortName(it.name)) + '</span>' + (fresh ? '<span class="pk-note">not found yet</span>' : '') + '</button>';
+          });
+          if (!tiles) return;
+          html += '<div class="pk-group r-' + k + '" data-r="' + k + '"><div class="pk-h"><span class="pk-rar">' + R.name + '</span><small><span class="coin-ic sm"></span>' + fmt(R.sell) + '</small>' +
+            (which === 'out' && st.inId ? '<b class="pk-odds">' + fmtPct(Upgrader.chance(base * st.qty, R.sell) * 100) + '</b>' : '') + '</div><div class="pk-grid">' + tiles + '</div></div>';
         });
-        if (!any) {
+        if (!html) {
           html = which === 'in' ? '<div class="empty"><b>No cards to upgrade</b>Open a chest first. Legendary cards are already the top.</div>'
             : '<div class="empty"><b>Nothing above this card</b>Pick a cheaper card to upgrade.</div>';
-        } else if (which === 'out' && st.inId) html = '<p class="sub" style="margin:0 2px 10px">The percentage is your chance with what you put in right now.</p>' + html;
+        } else {
+          html = '<p class="pk-sub">' + (which === 'in' ? 'The card you put in. You can add more copies of it afterwards.'
+            : st.inId ? 'The card you want. The percentage is your chance with what you put in right now.' : 'The card you want. Pick your own card as well to see the chance.') + '</p>' + html;
+        }
         body.innerHTML = html;
         body.addEventListener('click', function (ev) {
           var b = ev.target.closest ? ev.target.closest('button[data-id]') : null;
-          if (!b) return;
-          Sfx.click();
+          if (!b || chosen) return;
+          chosen = true; Sfx.click(); haptic(12);
+          $$('.pk-tile.on', body).forEach(function (x) { x.classList.remove('on'); });
+          b.classList.add('on');
           if (which === 'in') { st.inId = b.dataset.id; st.qty = 1; } else st.outId = b.dataset.id;
-          close(); paint();
+          // the tile lights up for a moment, then the sheet leaves and the card lands in its slot
+          setTimeout(function () { close(); paint(); }, reducedMotion ? 0 : 110);
         });
-      });
+      }, { cls: 'pk' });
     }
     function spin() {
       if (st.busy || !st.inId || !st.outId) return;
       var inId = st.inId, outId = st.outId, n = st.qty, p = odds();
       if (!(p > 0) || Store.free(inId) < n) { Sfx.deny(); UI.toast('Those cards are not available right now.'); paint(); return; }
       st.busy = true;                                              // from here on the ring keeps showing this stake
+      cancelAnimationFrame(pctAnim); shownP = p; pctEl.textContent = fmtPct(p * 100);
       Store.take(inId, n);
       Sfx.unlock();
       var roll = rand(), win = roll < p, S = Store.s;
@@ -143,15 +176,22 @@ Games.register({
       stage.className = 'up-stage spin'; paint();
       // where the pointer stops: the same roll, drawn on the ring (the green arc starts at the top, clockwise)
       var edge = 0.004, shown = win ? Math.min(Math.max(roll, edge), Math.max(edge, p - edge)) : Math.min(Math.max(roll, p + edge), 1 - edge);
-      var from = st.angle % 360, to = 360 * (reducedMotion ? 1 : Store.s.settings.fast ? 3 : 6) + shown * 360;
-      var dur = reducedMotion ? 500 : Store.s.settings.fast ? 1500 : 3600, t0 = performance.now(), lastTick = 0;
+      var fast = !!Store.s.settings.fast;
+      // A long spin: a short pull back, then many turns that slow down until the pointer creeps to its place.
+      var turns = reducedMotion ? 1 : fast ? 5 : 11, dur = reducedMotion ? 500 : fast ? 3000 : 7200, back = reducedMotion ? 0 : 12, lead = reducedMotion ? 0 : 260;
+      var from = st.angle % 360, to = 360 * turns + shown * 360, t0 = performance.now(), lastTick = Math.floor(from / 30);
       Sfx.whoosh();
       (function step(now) {
-        var k = sat((now - t0) / dur), a = from + (to - from) * ease.outQuint(k);
+        var t = now - t0, a;
+        if (t < lead) a = from - back * ease.outCubic(t / lead);
+        else {
+          var k = sat((t - lead) / (dur - lead));
+          a = (from - back) + (to - (from - back)) * (1 - Math.pow(1 - k, 3));      // still visibly creeping in the last second
+        }
         setNeedle(a);
         var seg = Math.floor(a / 30);
-        if (seg !== lastTick) { lastTick = seg; if (UI.view === 'games' && Games.active === 'up') Sfx.tick(k * 6); }
-        if (k < 1) { requestAnimationFrame(step); return; }
+        if (seg !== lastTick) { lastTick = seg; if (UI.view === 'games' && Games.active === 'up') { Sfx.tick(Math.min(6, t / dur * 7)); if (t > dur * 0.7) haptic(4); } }
+        if (t < dur) { requestAnimationFrame(step); return; }
         setNeedle(to % 360); finish();
       })(t0);
       function finish() {
@@ -166,7 +206,7 @@ Games.register({
         pctEl.textContent = win ? 'WIN' : 'MISS'; pctEl.className = 'num ' + (win ? 'w' : 'l');
         subEl.textContent = win ? 'upgraded' : 'cards lost';
         st.last = { win: win, roll: roll, p: p };
-        setTimeout(function () { st.busy = false; stage.className = 'up-stage'; paint(); }, reducedMotion ? 700 : 1500);
+        setTimeout(function () { st.busy = false; stage.className = 'up-stage'; shownP = 0; paint(); }, reducedMotion ? 700 : 1700);
       }
     }
     onTap($('#upIn', pane), function () { Sfx.click(); pick('in'); });

@@ -18,9 +18,11 @@ var UI = (function () {
     $('#toasts').appendChild(t);
     setTimeout(function () { t.classList.add('out'); setTimeout(function () { t.remove(); }, 320); }, ms || 2200);
   }
+  // A sheet that slides up from the bottom. It can be closed with the x, a tap beside it, or by dragging its
+  // head down. build(body, close) fills it before it moves, so it arrives complete.
   function sheet(title, build, opt) {
     opt = opt || {};
-    var bg = el('div', 'sheet-bg'), sh = el('div', 'sheet');
+    var bg = el('div', 'sheet-bg'), sh = el('div', 'sheet' + (opt.cls ? ' ' + opt.cls : ''));
     sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-modal', 'true'); sh.setAttribute('aria-label', title);
     var head = el('div', 'sheet-head', '<h2 class="h1">' + esc(title) + '</h2>');
     var x = el('button', 'x-btn', '&times;'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); head.appendChild(x);
@@ -30,13 +32,37 @@ var UI = (function () {
     var closed = false;
     function close() {
       if (closed) return; closed = true;
+      sh.style.transition = ''; sh.style.transform = ''; bg.style.opacity = '';
       bg.classList.remove('on'); sh.classList.remove('on');
-      setTimeout(function () { bg.remove(); sh.remove(); }, 400);
+      setTimeout(function () { bg.remove(); sh.remove(); }, 300);
       if (opt.onClose) opt.onClose();
     }
     onTap(x, function () { Sfx.click(); close(); }); onTap(bg, close);
     build(body, close);
-    requestAnimationFrame(function () { requestAnimationFrame(function () { bg.classList.add('on'); sh.classList.add('on'); }); });
+    // Reading the height makes the browser take in the start position, so the slide can begin in this same frame.
+    void sh.offsetHeight;
+    bg.classList.add('on'); sh.classList.add('on');
+    // drag the head down to close: the sheet follows the finger and either leaves or settles back
+    var y0 = 0, dy = 0, t0 = 0, dragging = false;
+    head.addEventListener('pointerdown', function (e) {
+      if (closed || (e.target.closest && e.target.closest('button'))) return;
+      dragging = true; y0 = e.clientY; dy = 0; t0 = performance.now();
+      sh.style.transition = 'none';
+      try { head.setPointerCapture(e.pointerId); } catch (er) {}
+    });
+    head.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      dy = Math.max(0, e.clientY - y0);
+      sh.style.transform = 'translateY(' + dy + 'px)';
+      bg.style.opacity = String(Math.max(0.2, 1 - dy / (sh.offsetHeight || 400)));
+    });
+    var drop = function () {
+      if (!dragging) return; dragging = false;
+      var quick = dy / Math.max(1, performance.now() - t0) > 0.5;
+      sh.style.transition = '';
+      if (dy > 110 || (quick && dy > 28)) close(); else { sh.style.transform = ''; bg.style.opacity = ''; }
+    };
+    head.addEventListener('pointerup', drop); head.addEventListener('pointercancel', drop);
     return { close: close, body: body };
   }
   function confirm(title, text, okLabel, danger) {
