@@ -96,8 +96,14 @@ input { font: inherit; color: inherit; }
 .chest-ui > * { pointer-events: auto; }
 .chest-ui.hide { opacity: 0; transform: translateY(16px); }
 .chest-ui.hide > * { pointer-events: none; }
-/* auto opening + fast open: one glass group under the chest, always on screen, so auto can be switched off mid-run */
-.auto-group { pointer-events: auto; display: flex; flex-direction: column; min-width: 216px; border-radius: 19px; background: rgba(18, 16, 27, .82); border: 1px solid rgba(255, 255, 255, .11); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); overflow: hidden; transition: border-color .25s, box-shadow .25s; }
+/* auto opening + fast open: one glass group under the chest. While auto opening runs it sits at the very bottom,
+   where the big buttons were, so the card never covers the switch that stops it; the room of the hidden buttons
+   stays, which keeps the chest where it is. While a chest opened by hand is on screen the group steps aside. */
+.chest-dock.auto .auto-group { order: 2; margin-bottom: 18px; }
+.chest-dock.auto .chest-ui { order: 1; }
+.auto-group.away { opacity: 0; transform: translateY(10px); pointer-events: none; }
+.chest-dock.auto ~ .skip-hint { bottom: 118px; }
+.auto-group { pointer-events: auto; display: flex; flex-direction: column; min-width: 216px; border-radius: 19px; background: rgba(18, 16, 27, .82); border: 1px solid rgba(255, 255, 255, .11); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: 0 8px 24px rgba(0, 0, 0, .45); overflow: hidden; transition: border-color .25s, box-shadow .25s, opacity .22s ease, transform .28s var(--ease); }
 .auto-group.on { border-color: rgba(255, 197, 49, .6); box-shadow: 0 0 0 1px rgba(255, 197, 49, .16), 0 8px 26px rgba(255, 190, 40, .2); }
 .ag-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; height: 38px; padding: 0 8px 0 16px; transition: background .15s; }
 .ag-row + .ag-row { border-top: 1px solid rgba(255, 255, 255, .07); }
@@ -147,11 +153,13 @@ input { font: inherit; color: inherit; }
 #reveal.fast .rcard.show .front::after { transition-duration: .45s; transition-delay: 0s; }
 .rtag { position: absolute; left: 9px; top: 9px; z-index: 2; display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px 3px; border-radius: 8px; background: rgba(12, 11, 18, .88); border: 1px solid #3a3450; font-weight: 800; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 .rtag.sold { color: var(--gold); border-color: #6b5210; } .rtag.kept { color: var(--win); border-color: #1d6b40; }
+/* --room is the height the card may use, measured by the chest view: from the top of the view down to the
+   buttons, or during auto opening down to the two switches at the bottom. */
 #reveal.with-banner .card-wrap { margin-top: 94px; }
-#reveal.with-banner .rcard { width: min(250px, 62vw, max(120px, calc((100vh - 488px) * .757))); }
-.card-wrap { margin-top: 8%; transform-style: preserve-3d; animation: cardRise .7s var(--ease) both; }
+#reveal.with-banner .rcard { width: min(250px, 62vw, max(112px, calc((var(--room, 320px) - 104px) * .757))); }
+.card-wrap { margin-top: calc(var(--room, 320px) * .075); transform-style: preserve-3d; animation: cardRise .7s var(--ease) both; }
 @keyframes cardRise { 0% { transform: translateY(46vh) scale(.2) rotateX(50deg); opacity: 0; } 55% { opacity: 1; } 100% { transform: none; opacity: 1; } }
-.rcard { --rc: var(--c-common); --rd: #5b6470; width: min(250px, 62vw, max(120px, calc((100vh - 426px) * .757))); aspect-ratio: 5 / 6.6; position: relative; transform-style: preserve-3d; transform: rotateY(180deg); }
+.rcard { --rc: var(--c-common); --rd: #5b6470; width: min(250px, 62vw, max(112px, calc((var(--room, 320px) * .925 - 10px) * .757))); aspect-ratio: 5 / 6.6; position: relative; transform-style: preserve-3d; transform: rotateY(180deg); }
 /* the turn: one even rotation with a slight lift in the middle and no bounce; the face then fills in piece by piece */
 .rcard.flip { animation: cardTurn .9s cubic-bezier(.62, .02, .28, 1) both, cardLift .9s ease-in-out both; }
 @keyframes cardTurn { from { transform: rotateY(180deg); } to { transform: rotateY(0deg); } }
@@ -375,7 +383,7 @@ input { font: inherit; color: inherit; }
 .ck-banner b { color: var(--gold); }
 
 /* mines */
-.mines-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; width: min(100%, max(250px, calc(100vh - 340px)), 460px); margin: 0 auto; }
+.mines-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; width: min(100%, max(250px, calc(var(--vh, 100vh) - 340px)), 460px); margin: 0 auto; }
 .mt { position: relative; aspect-ratio: 1; border-radius: 11px; background: linear-gradient(180deg, #2f2a42, #252135); border: 1px solid #3b3552; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .28); transition: transform .12s, background .2s; display: grid; place-items: center; overflow: hidden; }
 .mt:active { transform: scale(.94); }
 .mt.live:hover { background: linear-gradient(180deg, #3a3452, #2c2740); }
@@ -449,10 +457,10 @@ input { font: inherit; color: inherit; }
   .fn-btn { font-size: 28px; padding: 13px 12px 8px; } .fn-grey { font-size: 23px; padding: 11px 12px 7px; }
   .chest-ui { gap: 11px; padding: 10px 22px 12px; }
   .ag-row { height: 33px; }
-  .rcard { width: min(250px, 62vw, max(120px, calc((100vh - 376px) * .757))); }
-  #reveal.with-banner .rcard { width: min(250px, 62vw, max(120px, calc((100vh - 440px) * .757))); }
-  .card-wrap { margin-top: 5%; }
   #reveal.with-banner .card-wrap { margin-top: 84px; }
+  #reveal.with-banner .rcard { width: min(250px, 62vw, max(112px, calc((var(--room, 320px) - 94px) * .757))); }
+  .chest-dock.auto .auto-group { margin-bottom: 12px; }
+  .chest-dock.auto ~ .skip-hint { bottom: 98px; }
   .bj-table { min-height: 300px; }
 }
 @media (prefers-reduced-motion: reduce) {

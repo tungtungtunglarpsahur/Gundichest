@@ -493,8 +493,9 @@ var Trade = (function () {
     }
     if (bar.dataset.key !== key) {
       bar.dataset.key = key; bar.innerHTML = html; bar.classList.toggle('on', !!html);
-      setTimeout(function () { try { Chest3D.resize(); } catch (e) {} }, 30);
-      setTimeout(function () { try { Chest3D.resize(); } catch (e) {} }, 320);
+      // the bar takes room from the view: the chest and a card that is on screen follow
+      setTimeout(function () { try { Chest3D.resize(); ChestView.fit(); } catch (e) {} }, 30);
+      setTimeout(function () { try { Chest3D.resize(); ChestView.fit(); } catch (e) {} }, 320);
     }
     var b = $('#tradeBadge'), n = inbox.length + (open ? 1 : 0);
     if (b) { b.textContent = n > 9 ? '9+' : n; b.classList.toggle('on', n > 0 && UI.view !== 'trade'); }

@@ -5,6 +5,7 @@ var ChestView = (function () {
   // auto opening: opens chest after chest, keeps or sells each pull by the rules picked when it was switched on
   var auto = false, autoTimer = 0, run = null, pullSold = false;
   var cardFinish = null;      // set while a card is filling in: a tap completes it at once
+  var showCounters = null;    // set while a card is face down: lets the coin counter and inventory badge catch up
 
   function isFast() { return !!Store.s.settings.fast; }
   function fg() { return UI.view === 'chest'; }       // sounds, flashes and buzzes only while the chest is on screen
@@ -24,6 +25,7 @@ var ChestView = (function () {
     if (mode === 'home') {
       box.innerHTML = '';
       uiHome.forEach(function (n) { box.appendChild(n); });
+      switches(true);
     } else if (mode === 'reveal') {
       box.innerHTML = '';
       if (demo) {
@@ -70,6 +72,35 @@ var ChestView = (function () {
     b.classList.remove('run'); b.style.transitionDuration = '0s'; void b.offsetWidth;
     if (ms > 0) { b.style.transitionDuration = ms + 'ms'; b.classList.add('run'); }
   }
+  // Where the two switches (auto opening, fast open) are:
+  //  - idle: above the big buttons
+  //  - auto opening on: at the very bottom, where the big buttons were. The card then has the whole space above
+  //    them and can never cover the switch that stops auto opening.
+  //  - a chest opened by hand: out of the way until the card is closed; the card may use their space.
+  function switches(show) { var g = $('#autoGroup'); if (g) g.classList.toggle('away', !show && !auto); }
+  function dockMode() {
+    var dock = $('#chestDock'), g = $('#autoGroup');
+    if (!dock || !g || dock.classList.contains('auto') === auto) return;
+    var before = g.getBoundingClientRect().top;
+    dock.classList.toggle('auto', auto);
+    if (auto) g.classList.remove('away');
+    var moved = before - g.getBoundingClientRect().top;
+    if (moved && !reducedMotion && g.animate) {
+      try { g.animate([{ transform: 'translateY(' + moved + 'px)' }, { transform: 'none' }], { duration: 420, easing: 'cubic-bezier(.2, .9, .25, 1)' }); } catch (e) {}
+    }
+    fitCard();
+  }
+  // The card takes the room between the top of the view and whatever sits at the bottom right now. Measured
+  // instead of derived from the window height, which browsers with a collapsing toolbar report too large.
+  function fitCard() {
+    var host = $('#reveal'), view = $('#view-chest'), g = $('#autoGroup'), ui = $('#chestUi');
+    if (!host || !view || !view.offsetHeight) return;
+    var top = view.getBoundingClientRect().top;
+    var floor = auto ? g.getBoundingClientRect().top - 8 : ui.getBoundingClientRect().top + (ui.classList.contains('hide') ? -16 : 0) + 4;
+    host.style.setProperty('--room', Math.max(170, Math.round(floor - top)) + 'px');
+    var card = $('.rcard', host);
+    if (card) card.style.setProperty('--cw', (card.offsetWidth || 250) + 'px');      // type on the card scales with the card
+  }
   function paintToggles() {
     var a = $('#autoPill'), f = $('#fastPill'), g = $('#autoGroup');
     if (a) { a.classList.toggle('on', auto); a.setAttribute('aria-checked', auto ? 'true' : 'false'); }
@@ -100,6 +131,8 @@ var ChestView = (function () {
   function setAuto(on) {
     on = !!on; if (on === auto) return;
     auto = on; Chest3D.keepAlive = auto; clearTimeout(autoTimer); bar(0);
+    dockMode();
+    if (!auto && busy) switches(false);                              // back to a chest opened by hand
     if (auto) {
       run = newRun(); paintToggles();
       if (!busy) open();
@@ -119,6 +152,11 @@ var ChestView = (function () {
     var R = RARITY[item.rarity], isNew = false, viaAuto = auto && !demo, gain = 0;
     pullSold = false;
     if (!demo) {
+      // The pull is booked now, and sold now if the auto rules say so. The coin counter and the inventory badge
+      // wait until the card has turned: a jump by 1,500 would say "epic" while the card still shows its back.
+      UI.hold();
+      var holding = true;
+      showCounters = function () { if (holding) { holding = false; showCounters = null; UI.release(); } };
       isNew = Store.grant(item);
       if (viaAuto) {
         var st = Store.s.stats, rules = Store.s.settings.autoSell || {};
@@ -148,7 +186,7 @@ var ChestView = (function () {
       '<div class="cell st" style="--d:880"><small>Worth</small><b><span class="coin-ic sm"></span>' + fmt(item.sell) + '</b></div></div></div></div>';
     wrap.appendChild(card); host.appendChild(wrap);
     host.classList.toggle('with-banner', item.rarity === 'legendary'); host.classList.toggle('fast', fast); host.classList.add('on');
-    card.style.setProperty('--cw', (card.offsetWidth || 250) + 'px');      // type on the card scales with the card
+    fitCard();
     // long names shrink until "H. Weber-Hänel" fits on one line
     var who = card.querySelector('.who span'), room = card.querySelector('.art').clientWidth - 26;
     if (who && room > 40 && who.offsetWidth > room) {
@@ -160,6 +198,7 @@ var ChestView = (function () {
     var timers = [], faced = false, done = false;
     function face() {                     // the front comes into view
       if (faced || seq !== revealSeq) return; faced = true;
+      if (showCounters) showCounters();
       if (!fg()) return;
       Sfx.reveal(R.tier); haptic(R.tier >= 3 ? [30, 40, 60] : 20);
       if (sold) Sfx.coin(1);
@@ -167,6 +206,7 @@ var ChestView = (function () {
     }
     function ready() {
       if (done || seq !== revealSeq) return; done = true; cardFinish = null;
+      if (showCounters) showCounters();
       if (item.rarity === 'legendary') showBanner(item);
       $('#skipHint').classList.remove('on');
       revealReady = true;
@@ -190,6 +230,7 @@ var ChestView = (function () {
     busy = true; demo = !!isDemo; revealShown = false; revealReady = false; pullSold = false;
     current = rollItem(forceRarity);
     $('#chestUi').classList.add('hide');
+    switches(false);
     hideBanner();
     if (fg()) { Sfx.unlock(); Sfx.click(); Sfx.rattle(0.8 + RARITY[current.rarity].tier * 0.08); }
     clearTimeout(skipTimer);
@@ -198,6 +239,7 @@ var ChestView = (function () {
   }
   function close() {
     revealSeq++; revealReady = false; cardFinish = null; clearTimeout(autoTimer); bar(0);
+    if (showCounters) showCounters();
     $('#reveal').classList.remove('on'); $('#reveal').innerHTML = '';
     $('#skipHint').classList.remove('on');
     $('#chestUi').classList.add('hide');
@@ -222,7 +264,7 @@ var ChestView = (function () {
     onTap($('#fastPill'), function () { Sfx.unlock(); Sfx.click(); haptic(15); Store.set('fast', !isFast()); });
     Store.on(function (what) { if (what === 'settings') { paintToggles(); Chest3D.setFast(isFast()); } });
     paintToggles();
-    fix(); window.addEventListener('resize', function () { if (!busy) fix(); });
+    fix(); window.addEventListener('resize', function () { if (!busy) fix(); fitCard(); });
     onTap($('#btnOpen'), function () { open(); });
     onTap($('#btnIndex'), function () { Sfx.click(); IndexSheet.open(); });
     // a tap skips whatever is running: first the chest animation, then the card filling in
@@ -247,8 +289,8 @@ var ChestView = (function () {
     };
     UI.onView(function (v) {
       Chest3D.visible = (v === 'chest');
-      if (v === 'chest') Chest3D.resize();
+      if (v === 'chest') { Chest3D.resize(); fitCard(); }
     });
   }
-  return { init: init, open: open, close: close, setAuto: setAuto, get busy() { return busy; }, get auto() { return auto; }, get run() { return run; } };
+  return { init: init, open: open, close: close, setAuto: setAuto, fit: fitCard, get busy() { return busy; }, get auto() { return auto; }, get run() { return run; } };
 })();

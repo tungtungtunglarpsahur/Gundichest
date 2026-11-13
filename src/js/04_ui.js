@@ -79,7 +79,14 @@ var UI = (function () {
       }, { onClose: function () { res(done); } });
     });
   }
+  // While held, the coin counter and the inventory badge keep showing what they showed. Auto opening uses this:
+  // a pull is booked (and maybe sold) the moment its card comes up, but the numbers only move once the card has
+  // turned, so they do not give the card away.
+  var held = 0;
+  function hold() { held++; }
+  function release() { if (held > 0 && --held === 0) { renderCoins(); renderBadge(); } }
   function renderCoins() {
+    if (held) return;
     var target = Store.s.coins, from = shownCoins, t0 = performance.now(), dur = Math.abs(target - from) > 0 ? 420 : 0, node = $('#coinAmt');
     cancelAnimationFrame(coinAnim);
     (function step(now) {
@@ -90,16 +97,20 @@ var UI = (function () {
     if (target !== from) { var p = $('#coinPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump'); }
   }
   function renderBadge() {
+    if (held) return;
     var n = 0, inv = Store.s.inv; for (var k in inv) n += inv[k];
     var b = $('#invBadge'); b.textContent = n > 99 ? '99+' : n; b.classList.toggle('on', n > 0);
     if (!openedEl) openedEl = $('#openedCount');     // kept by reference: the node is detached while a reveal is on screen
     if (openedEl) openedEl.textContent = fmt(Store.s.opened);
   }
   return {
-    ICON: ICON, go: go, toast: toast, sheet: sheet, confirm: confirm, renderCoins: renderCoins, renderBadge: renderBadge,
+    ICON: ICON, go: go, toast: toast, sheet: sheet, confirm: confirm, renderCoins: renderCoins, renderBadge: renderBadge, hold: hold, release: release,
     get view() { return view; },
     onView: function (fn) { listeners.push(fn); },
     initShell: function () {
+      // --vh: the height that is really visible. "100vh" is taller than that in browsers whose toolbar collapses.
+      var setVh = function () { document.documentElement.style.setProperty('--vh', window.innerHeight + 'px'); };
+      setVh(); window.addEventListener('resize', setVh);
       $$('#nav button').forEach(function (b) { onTap(b, function () { Sfx.tab(); go(b.dataset.go); }); });
       onTap($('#coinPill'), function () { Sfx.click(); go('inv'); });
       shownCoins = Store.s.coins; $('#coinAmt').textContent = fmtShort(shownCoins); renderBadge();
