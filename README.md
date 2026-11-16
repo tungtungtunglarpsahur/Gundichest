@@ -160,7 +160,7 @@ the same way as after a trade. Rounds nobody bet on, and the single-file version
 
 The chest, the other games and the Upgrader run in the browser, and the server stores what the browser
 reports. Someone who knows their way around browser tools can give themselves coins or cards; that Rugpull
-and Rocket are decided on the server does not change this. The same goes for the hidden gem combination on
+and Rocket are decided on the server does not change this. The same goes for the hidden gem trick on
 the back of the chest: it is in this repository for anyone to read. Passwords are stored
 as salted scrypt hashes, sessions as hashes of random tokens; there is no email and no password reset.
 

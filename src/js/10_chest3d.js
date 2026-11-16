@@ -425,12 +425,12 @@ var Chest3D = (function () {
       s.userData = { kind: g.kind, base: new T.Color({ purple: '#dc4fe0', orange: '#ff8a2a', blue: '#6f93e6' }[g.kind]) };
       return s;
     });
-    // A hidden combination: the four purple gems on the BACK of the chest can be tapped (turn the chest round to
-    // reach them). A tapped gem stays lit. Whoever opens the next chest with all four lit gets a legendary; with
-    // only the two upper ones lit, an epic. See C.takeSecret.
-    C.backGems = { upper: [], lower: [] };
-    M.gems.forEach(function (g, i) { if (g.kind === 'purple' && g.pos[2] < 0) C.backGems[g.part === 'lid' ? 'upper' : 'lower'].push(i); });
-    C.armed = {};
+    // A hidden trick: turn the chest round and tap the purple gem at the top left of its back. Tapped twice, the
+    // next chest holds an epic; tapped four times, a legendary. Nothing lights up while tapping. See C.takeSecret.
+    C.secretGem = -1; C.secretTaps = 0;
+    M.gems.forEach(function (g, i) {              // seen from behind, the upper gem with the larger x is the one on the left
+      if (g.kind === 'purple' && g.part === 'lid' && g.pos[2] < 0 && (C.secretGem < 0 || g.pos[0] > M.gems[C.secretGem].pos[0])) C.secretGem = i;
+    });
     var cav = M.cavity, cw = Math.abs(cav.max[0] - cav.min[0]), cd = Math.abs(cav.max[2] - cav.min[2]);
     C.inner = new T.Mesh(new T.PlaneGeometry(cw * 1.02, cd * 1.02), addMat({ side: T.DoubleSide }));
     C.inner.rotation.x = -Math.PI / 2; C.inner.position.set(0, M.seamY - 0.16, (cav.min[2] + cav.max[2]) / 2); yawG.add(C.inner);
@@ -541,20 +541,14 @@ var Chest3D = (function () {
       return best;
     };
     C.tap = function (cx, cy) {
-      if (C.state !== 'idle') return;
-      var i = C.gemAt(cx, cy);
-      if (i < 0 || (C.backGems.upper.indexOf(i) < 0 && C.backGems.lower.indexOf(i) < 0)) return;
-      if (C.armed[i] != null) delete C.armed[i]; else C.armed[i] = C.time;     // a second tap takes it back
-      if (C.hooks.onGem) C.hooks.onGem(i, C.armed[i] != null, C.secret());
+      if (C.state !== 'idle' || C.secretGem < 0 || C.gemAt(cx, cy) !== C.secretGem) return;
+      C.secretTaps++;
+      if (C.hooks.onGem) C.hooks.onGem(C.secretTaps, C.secret());
     };
-    // What the lit gems add up to right now: 'legendary', 'epic' or null.
-    C.secret = function () {
-      var lit = function (i) { return C.armed[i] != null; };
-      var up = C.backGems.upper.length > 0 && C.backGems.upper.every(lit), low = C.backGems.lower.length > 0 && C.backGems.lower.every(lit);
-      return up && low ? 'legendary' : up && !C.backGems.lower.some(lit) ? 'epic' : null;
-    };
-    // Called when a chest is opened: returns what the combination is worth and puts every gem out again.
-    C.takeSecret = function () { var s = C.secret(); C.armed = {}; return s; };
+    // What the taps so far are worth: 'legendary' (four or more), 'epic' (two or three) or null.
+    C.secret = function () { return C.secretTaps >= 4 ? 'legendary' : C.secretTaps >= 2 ? 'epic' : null; };
+    // Called when a chest is opened: returns what the taps are worth and starts counting from nothing again.
+    C.takeSecret = function () { var s = C.secret(); C.secretTaps = 0; return s; };
 
     C.setQuality(quality);
     C.resize();
@@ -860,9 +854,6 @@ var Chest3D = (function () {
     for (var gi = 0; gi < C.gemGlows.length; gi++) {
       var gs = C.gemGlows[gi]; gs.material.color.copy(gs.userData.base).lerp(color, glowMix);
       gs.material.opacity = sat(0.05 + 0.025 * Math.sin(time * 1.7 + gi) + (glow - 0.3) * 0.2);
-      if (C.armed[gi] != null && idle) {             // a gem that was tapped: lit, with a short flare when it is touched
-        gs.material.opacity = sat(0.62 + 0.1 * Math.sin(time * 5 + gi) + 0.4 * Math.exp(-(time - C.armed[gi]) * 6));
-      }
     }
     // chain fragments
     if (C.fragG.visible) {

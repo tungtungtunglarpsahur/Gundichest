@@ -239,7 +239,7 @@ var ChestView = (function () {
     if (busy) return;
     if (!Chest3D.renderer || Chest3D.state !== 'idle') return;
     busy = true; demo = !!isDemo; revealShown = false; revealReady = false; pullSold = false;
-    // gems lit on the back of the chest decide this pull (Chest3D.takeSecret); a preview leaves them alone
+    // taps on the gem at the back of the chest decide this pull (Chest3D.takeSecret); a preview leaves them alone
     current = rollItem(forceRarity || (isDemo ? null : Chest3D.takeSecret()) || undefined);
     if (!isDemo) current = mutate(current, rollMutation());       // one chest in ten: the same card, mutated
     $('#chestUi').classList.add('hide');
@@ -294,10 +294,9 @@ var ChestView = (function () {
       if (idx > 0) { flash(Chest3D.TIER_COLORS[tier], 0.3 + 0.12 * idx, 450); haptic(25 + idx * 20); }
       if (idx === 0 && seq.tier >= 3) Sfx.riser((seq.chainT - 0.3) / seq.speed, seq.tier === 4 ? 1.2 : 0.8);
     };
-    Chest3D.hooks.onGem = function (i, lit, combo) {
-      if (!fg()) return;
-      if (lit) { Sfx.unlock(); Sfx.gem(combo === 'legendary' ? 14 : combo === 'epic' ? 9 : 4); haptic(combo ? [15, 40, 25] : 12); } else { Sfx.tick(1); haptic(8); }
-    };
+    // The hidden trick on the back of the chest: nothing to see. A quiet tick (only with sound on) and a short buzz
+    // (where the phone can) tell the one who knows that the tap counted.
+    Chest3D.hooks.onGem = function () { if (!fg()) return; Sfx.unlock(); Sfx.tick(1); haptic(8); };
     Chest3D.hooks.onPhase = function (name, seq) {
       if (name === 'reveal') { showReveal(current); return; }
       if (!fg()) return;

@@ -1,5 +1,6 @@
-"""The hidden combination on the back of the chest: all four purple gems lit -> the next chest is a legendary,
-only the two upper ones -> an epic. Also: Fast open timing, no zoom / no copy, the two-button row on a wide screen."""
+"""The hidden trick on the back of the chest: the purple gem at the top left (seen from behind), tapped twice ->
+the next chest is an epic, four times -> a legendary. Nothing lights up. Also: Fast open timing, no zoom / no copy,
+the two-button row on a wide screen."""
 import sys, os, time
 sys.path.insert(0, os.path.dirname(__file__))
 from harness import *
@@ -19,84 +20,94 @@ def drive(pg):
           C.root.updateMatrixWorld(true); C.camera.updateMatrixWorld(true);
           C.gemGlows.forEach((s, i) => { const v = s.getWorldPosition(new s.position.constructor()); v.project(C.camera);
             const x = r.left + (v.x * .5 + .5) * r.width, y = r.top + (.5 - v.y * .5) * r.height;
-            out.push({ i, kind: C.M.gems[i].kind, part: C.M.gems[i].part, back: C.M.gems[i].pos[2] < 0, x, y, hit: C.gemAt(x, y) }); });
+            out.push({ i, kind: C.M.gems[i].kind, part: C.M.gems[i].part, back: C.M.gems[i].pos[2] < 0, x, y, hit: C.gemAt(x, y), glow: s.material.opacity }); });
           return out; }""")
-    def lit(): return ev("Object.keys(window.__GC.chest.armed).map(Number).sort((a, b) => a - b)")
-    return sim, turn, gems, lit
+    def taps(): return ev("window.__GC.chest.secretTaps")
+    return sim, turn, gems, taps
 
 with sync_playwright() as p:
     b = launch(p)
     U = make_user({'coins': 0})
     pg = open_app(page_for(b, U, 390, 844, 2, errs))
-    sim, turn, gems, lit = drive(pg)
+    sim, turn, gems, taps = drive(pg)
+    secret = lambda: pg.evaluate(G + '.chest.secret()')
     pg.wait_for_timeout(200); sim(0.2)
-    back = pg.evaluate(G + '.chest.backGems')
-    c.eq([len(back['upper']), len(back['lower'])], [2, 2], 'the back of the chest has two upper and two lower purple gems')
+    S = pg.evaluate(G + '.chest.secretGem')
 
-    # ---- from the front nothing happens: the gems there are not part of it, the back ones cannot be reached
+    # ---- which gem it is: on the back, on the lid, and on the left when you look at the back
+    turn(3.14159)
+    gs = gems(); by = {g['i']: g for g in gs}
+    backs = [g for g in gs if g['back'] and g['kind'] == 'purple']
+    uppers = sorted([g for g in backs if g['part'] == 'lid'], key=lambda g: g['x'])
+    c.eq([len(backs), len(uppers)], [4, 2], 'the back of the chest has four purple gems, two of them on the lid')
+    c.eq(S, uppers[0]['i'], 'the gem that counts is the upper left one, seen from behind')
+    c.ok(all(by[S]['y'] < g['y'] for g in backs if g['part'] != 'lid') and by[S]['hit'] == S, 'it is above the lower gems and can be touched', by[S])
+
+    # ---- from the front nothing happens, whatever is tapped
     turn(0)
     front = [g for g in gems() if g['hit'] == g['i']]
     c.ok(len(front) >= 4 and not any(g['back'] for g in front), 'from the front only front gems can be touched', [g['i'] for g in front])
-    for g in front: pg.mouse.click(g['x'], g['y'])
-    c.eq(lit(), [], 'tapping gems on the front lights nothing')
+    for g in front: pg.mouse.click(g['x'], g['y']); pg.mouse.click(g['x'], g['y'])
+    c.eq([taps(), secret()], [0, None], 'tapping gems on the front does nothing')
 
-    # ---- turn the chest round: the four back gems can be tapped and stay lit
-    turn(3.14159)
-    gs = gems()
-    reach = sorted(g['i'] for g in gs if g['back'] and g['kind'] == 'purple' and g['hit'] == g['i'])
-    c.eq(reach, sorted(back['upper'] + back['lower']), 'turned round, all four back gems can be touched')
-    by = {g['i']: g for g in gs}
-    pg.mouse.click(by[back['upper'][0]]['x'], by[back['upper'][0]]['y']); turn(3.14159)
-    c.eq(lit(), [back['upper'][0]], 'a tapped gem is lit')
-    c.eq(pg.evaluate(G + '.chest.secret()'), None, 'one gem alone is no combination')
-    pg.mouse.click(by[back['upper'][0]]['x'], by[back['upper'][0]]['y']); turn(3.14159)
-    c.eq(lit(), [], 'a second tap puts it out again')
+    # ---- turned round: the other three back gems do nothing either
+    turn(3.14159); by = {g['i']: g for g in gems()}
+    for g in backs:
+        if g['i'] != S:
+            for _ in range(4): pg.mouse.click(by[g['i']]['x'], by[g['i']]['y']); turn(3.14159)
+    c.eq([taps(), secret()], [0, None], 'the other back gems do nothing, however often they are tapped')
+
+    # ---- one tap is nothing yet, and nothing lights up
+    dark = by[S]['glow']
+    pg.mouse.click(by[S]['x'], by[S]['y']); turn(3.14159); sim(0.1); turn(3.14159)
+    after = {g['i']: g for g in gems()}
+    c.eq([taps(), secret()], [1, None], 'one tap counts, but is worth nothing yet')
+    c.ok(abs(after[S]['glow'] - dark) < 0.06 and abs(after[S]['glow'] - after[uppers[1]['i']]['glow']) < 0.06, 'the tapped gem does not light up', (dark, after[S]['glow'], after[uppers[1]['i']]['glow']))
+    c.eq(pg.evaluate("!!document.querySelector('.toast.on, #feed .ann')"), False, 'and nothing else on the screen gives it away')
     # a drag is not a tap
-    g0 = by[back['lower'][0]]
-    pg.mouse.move(g0['x'], g0['y']); pg.mouse.down(); pg.mouse.move(g0['x'] + 40, g0['y'], steps=4); pg.mouse.up()
-    c.eq(lit(), [], 'dragging across a gem does not light it')
-    turn(3.14159)
-    by = {g['i']: g for g in gems()}
+    pg.mouse.move(by[S]['x'], by[S]['y']); pg.mouse.down(); pg.mouse.move(by[S]['x'] + 40, by[S]['y'], steps=4); pg.mouse.up()
+    c.eq(taps(), 1, 'dragging across the gem is not a tap')
+    turn(3.14159); by = {g['i']: g for g in gems()}
 
-    # ---- the two upper ones: the next chest is an epic
-    for i in back['upper']: pg.mouse.click(by[i]['x'], by[i]['y']); turn(3.14159)
-    c.eq(pg.evaluate(G + '.chest.secret()'), 'epic', 'both upper gems lit: epic')
-    sim(0.3); shot(pg, 'secret_epic')
+    # ---- two taps: the next chest is an epic
+    pg.mouse.click(by[S]['x'], by[S]['y']); turn(3.14159)
+    c.eq([taps(), secret()], [2, 'epic'], 'tapped twice: epic')
+    sim(0.3); shot(pg, 'secret_two_taps')
     turn(0); sim(0.2)
-    # rig the dice: every roll is 0.9, which is a common card
-    pg.evaluate("(v) => { crypto.getRandomValues = (a) => { for (let k = 0; k < a.length; k++) a[k] = Math.floor(v * 4294967296); return a; }; }", 0.9)       # the dice say: common
-    pg.click('#btnOpen'); pg.wait_for_timeout(100); sim(6.0); pg.wait_for_timeout(3000); sim(0.3)
+    # rig the dice: every roll is 0.9, which is a common card without a mutation
+    pg.evaluate("(v) => { crypto.getRandomValues = (a) => { for (let k = 0; k < a.length; k++) a[k] = Math.floor(v * 4294967296); return a; }; }", 0.9)
+    pg.click('#btnOpen'); pg.wait_for_timeout(100); sim(8.0); pg.wait_for_timeout(3200); sim(0.3)
     c.ok(pg.evaluate("document.querySelector('#reveal .rcard').classList.contains('r-epic')"), 'the chest gives an epic although the dice said common')
     c.eq(pg.evaluate(G + '.store.s.stats.epic'), 1, 'it is a real pull: counted and in the inventory')
-    c.eq(lit(), [], 'opening uses the combination up')
+    c.eq(taps(), 0, 'opening uses the taps up')
     pg.click('#chestUi .fn-grey'); pg.wait_for_timeout(100); sim(0.8); pg.wait_for_timeout(400)
     # the chest after that is an ordinary one again
     pg.click('#btnOpen'); pg.wait_for_timeout(100); sim(6.0); pg.wait_for_timeout(3000); sim(0.3)
     c.ok(pg.evaluate("document.querySelector('#reveal .rcard').classList.contains('r-common')"), 'the chest after that follows the dice again')
     pg.click('#chestUi .fn-grey'); pg.wait_for_timeout(100); sim(0.8); pg.wait_for_timeout(400)
 
-    # ---- all four: a legendary
+    # ---- three taps are still an epic, four a legendary
     turn(3.14159); by = {g['i']: g for g in gems()}
-    for i in back['upper'] + back['lower']: pg.mouse.click(by[i]['x'], by[i]['y']); turn(3.14159)
-    c.eq(pg.evaluate(G + '.chest.secret()'), 'legendary', 'all four lit: legendary')
-    sim(0.3); shot(pg, 'secret_legendary')
+    for _ in range(3): pg.mouse.click(by[S]['x'], by[S]['y']); turn(3.14159)
+    c.eq([taps(), secret()], [3, 'epic'], 'tapped three times: still epic')
+    pg.mouse.click(by[S]['x'], by[S]['y']); turn(3.14159)
+    c.eq([taps(), secret()], [4, 'legendary'], 'tapped four times: legendary')
     turn(0); sim(0.2)
     pg.click('#btnOpen'); pg.wait_for_timeout(100); sim(8.0); pg.wait_for_timeout(3200); sim(0.3)
     c.ok(pg.evaluate("document.querySelector('#reveal .rcard').classList.contains('r-legendary')"), 'the chest gives a legendary')
     c.eq(pg.evaluate(G + '.store.s.stats.legend'), 1, 'counted as a legendary pull')
     pg.click('#chestUi .fn-grey'); pg.wait_for_timeout(100); sim(0.8); pg.wait_for_timeout(400)
 
-    # ---- three gems are nothing, and a preview from the settings leaves lit gems alone
+    # ---- a preview from the settings leaves the taps alone; one tap alone gives an ordinary chest
     turn(3.14159); by = {g['i']: g for g in gems()}
-    for i in back['upper'] + back['lower'][:1]: pg.mouse.click(by[i]['x'], by[i]['y']); turn(3.14159)
-    c.eq(pg.evaluate(G + '.chest.secret()'), None, 'two upper and one lower: no combination')
+    pg.mouse.click(by[S]['x'], by[S]['y']); turn(3.14159)
     turn(0); sim(0.2)
     pg.evaluate(G + '.view.open("rare", true)'); pg.wait_for_timeout(100); sim(6.0); pg.wait_for_timeout(3000); sim(0.3)
-    c.eq(len(lit()), 3, 'a preview does not use the gems up')
+    c.eq(taps(), 1, 'a preview does not use the taps up')
     pg.click('#chestUi .fn-grey'); pg.wait_for_timeout(100); sim(0.8); pg.wait_for_timeout(400)
     pg.click('#btnOpen'); pg.wait_for_timeout(100); sim(6.0); pg.wait_for_timeout(3000); sim(0.3)
-    c.ok(pg.evaluate("document.querySelector('#reveal .rcard').classList.contains('r-common')"), 'three gems: an ordinary chest')
-    c.eq(lit(), [], 'and they are out afterwards')
+    c.ok(pg.evaluate("document.querySelector('#reveal .rcard').classList.contains('r-common')"), 'one tap: an ordinary chest')
+    c.eq(taps(), 0, 'and the count starts from nothing afterwards')
     pg.click('#chestUi .fn-grey'); pg.wait_for_timeout(100); sim(0.8); pg.wait_for_timeout(400)
 
     # ---- Fast open: one common chest from tap to the buttons in well under a second of animation
@@ -129,7 +140,7 @@ with sync_playwright() as p:
     # ---- wide screen (tablet, landscape): SELL and KEEP sit under OPEN AGAIN, same width, centred
     U2 = make_user({'coins': 0})
     pg = open_app(page_for(b, U2, 1158, 798, 2, errs))
-    sim, turn, gems, lit = drive(pg)
+    sim, turn, gems, taps = drive(pg)
     pg.wait_for_timeout(200); sim(0.2)
     pg.click('#btnOpen'); pg.wait_for_timeout(100); sim(6.0); pg.wait_for_timeout(3200); sim(0.3)
     r = pg.evaluate("""() => { const q = s => { const b = document.querySelector(s).getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right)]; };
