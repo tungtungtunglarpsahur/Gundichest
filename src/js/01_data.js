@@ -1,11 +1,11 @@
 // Loot table: chance is the share of chests per rarity in percent (the five add up to 100), sell the coin value.
 // server/items.js holds the same ids and values for trading; tests/items.test.js keeps the two in step.
 var RARITY = {
-  common: { key: 'common', name: 'Common', color: '#a3acb8', deep: '#5b6470', chance: 63.4, sell: 10, tier: 0 },
+  common: { key: 'common', name: 'Common', color: '#a3acb8', deep: '#5b6470', chance: 63.77, sell: 10, tier: 0 },
   uncommon: { key: 'uncommon', name: 'Uncommon', color: '#45d86b', deep: '#1f8a3b', chance: 22, sell: 25, tier: 1 },
   rare: { key: 'rare', name: 'Rare', color: '#3d9dff', deep: '#1a57c4', chance: 14, sell: 100, tier: 2 },
-  epic: { key: 'epic', name: 'Epic', color: '#b65cff', deep: '#6a1fc0', chance: 0.5, sell: 1500, tier: 3 },
-  legendary: { key: 'legendary', name: 'Legendary', color: '#ffc531', deep: '#c47a00', chance: 0.1, sell: 10000, tier: 4 }
+  epic: { key: 'epic', name: 'Epic', color: '#b65cff', deep: '#6a1fc0', chance: 0.2, sell: 1500, tier: 3 },
+  legendary: { key: 'legendary', name: 'Legendary', color: '#ffc531', deep: '#c47a00', chance: 0.03, sell: 10000, tier: 4 }
 };
 var RARITY_ORDER = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
 // Every card has a fixed id. Saved games and trades refer to cards by it, so an id never moves to another card,

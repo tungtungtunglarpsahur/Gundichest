@@ -541,7 +541,7 @@ var Chest3D = (function () {
       return best;
     };
     C.tap = function (cx, cy) {
-      if (C.state !== 'idle' || C.secretGem < 0 || C.gemAt(cx, cy) !== C.secretGem) return;
+      if (true || C.state !== 'idle' || C.secretGem < 0 || C.gemAt(cx, cy) !== C.secretGem) return;
       C.secretTaps++;
       if (C.hooks.onGem) C.hooks.onGem(C.secretTaps, C.secret());
     };
@@ -603,12 +603,12 @@ var Chest3D = (function () {
   };
 
   // ---- opening choreography ---------------------------------------------------------------------
-  function seqFor(rarityKey, fast) {
+  function seqFor(rarityKey, fast, brisk) {
     var tier = RARITY[rarityKey].tier, s;
     if (tier <= 2) s = { tiers: [[0.3, tier]], chainT: 0.42, openT: 0.95, openDur: 0.55, revealT: 1.3, end: 1.75, power: 0.55 + tier * 0.12 };
     else if (tier === 3) s = { tiers: [[0.3, 2], [1.25, 3]], chainT: 1.55, openT: 2.0, openDur: 0.6, revealT: 2.45, end: 3.0, power: 1.0 };
     else s = { tiers: [[0.3, 2], [1.2, 3], [2.35, 4]], chainT: 3.1, openT: 3.65, openDur: 0.7, revealT: 4.25, end: 4.9, power: 1.35 };
-    s.tier = tier; s.key = rarityKey; s.speed = fast ? FAST_SPEED : 1;
+    s.tier = tier; s.key = rarityKey; s.speed = fast ? FAST_SPEED : brisk ? 1.9 : 1;      // brisk: an everyday card, no need to linger
     return s;
   }
   var colA = null, colB = null;
@@ -626,7 +626,7 @@ var Chest3D = (function () {
   C.playOpen = function (rarityKey, opt) {
     opt = opt || {};
     if (C.state !== 'idle') return Promise.resolve(false);
-    var seq = seqFor(rarityKey, !!opt.fast);
+    var seq = seqFor(rarityKey, !!opt.fast, !!opt.brisk);
     C.state = 'opening';
     C.anim = { seq: seq, t: 0, fired: {}, tc: { color: new T.Color(), k: 0, since: 0, tier: -1 }, done: null, lastEmit: 0, coinsLeft: 0 };
     return new Promise(function (res) { C.anim.done = res; });

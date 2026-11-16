@@ -52,8 +52,8 @@ test('drop chances add up to 100% and follow the rarity order', () => {
   const total = RARITY_ORDER.reduce((s, k) => s + RARITY[k].chance, 0);
   assert.ok(Math.abs(total - 100) < 1e-9, 'total ' + total);
   assert.ok(Math.abs(ITEMS.reduce((s, it) => s + it.chance, 0) - 100) < 1e-9);
-  assert.equal(RARITY.epic.chance, 0.5);
-  assert.equal(RARITY.legendary.chance, 0.1);
+  assert.equal(RARITY.epic.chance, 0.2);
+  assert.equal(RARITY.legendary.chance, 0.03);
   const c = RARITY_ORDER.map((k) => RARITY[k].chance);
   assert.deepEqual(c.slice().sort((a, b) => a - b), c);      // legendary is the rarest, common the most likely
 });

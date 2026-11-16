@@ -20,11 +20,11 @@ Play coins only. Nothing in the game costs or pays real money.
 
 | Rarity    | Per chest | Cards | Sells for |
 |-----------|-----------|-------|-----------|
-| Common    | 63.4%     | 7     | 10        |
+| Common    | 63.77%    | 7     | 10        |
 | Uncommon  | 22%       | 3     | 25        |
 | Rare      | 14%       | 8     | 100       |
-| Epic      | 0.5%      | 5     | 1,500     |
-| Legendary | 0.1%      | 3     | 10,000    |
+| Epic      | 0.2%      | 5     | 1,500     |
+| Legendary | 0.03%     | 3     | 10,000    |
 
 A chest rolls the rarity first, then one card of that rarity. The table lives in `src/js/01_data.js`.
 
@@ -160,8 +160,7 @@ the same way as after a trade. Rounds nobody bet on, and the single-file version
 
 The chest, the other games and the Upgrader run in the browser, and the server stores what the browser
 reports. Someone who knows their way around browser tools can give themselves coins or cards; that Rugpull
-and Rocket are decided on the server does not change this. The same goes for the hidden gem trick on
-the back of the chest: it is in this repository for anyone to read. Passwords are stored
+and Rocket are decided on the server does not change this. Passwords are stored
 as salted scrypt hashes, sessions as hashes of random tokens; there is no email and no password reset.
 
 ## Credits

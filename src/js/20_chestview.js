@@ -203,7 +203,7 @@ var ChestView = (function () {
     }
     var sold = pullSold;
     // rise -> turn -> the face fills in -> buttons. Fast open compresses the same steps.
-    var T = fast ? { flip: 70, face: 160, show: 190, ready: 380 } : { flip: 760, face: 1190, show: 1320, ready: 2570 };
+    var T = fast ? { flip: 70, face: 160, show: 190, ready: 380 } : special(item) ? { flip: 760, face: 1190, show: 1320, ready: 2570 } : { flip: 320, face: 560, show: 640, ready: 1150 };
     var timers = [], faced = false, done = false;
     function face() {                     // the front comes into view
       if (faced || seq !== revealSeq) return; faced = true;
@@ -240,7 +240,7 @@ var ChestView = (function () {
     if (!Chest3D.renderer || Chest3D.state !== 'idle') return;
     busy = true; demo = !!isDemo; revealShown = false; revealReady = false; pullSold = false;
     // taps on the gem at the back of the chest decide this pull (Chest3D.takeSecret); a preview leaves them alone
-    current = rollItem(forceRarity || (isDemo ? null : Chest3D.takeSecret()) || undefined);
+    current = rollItem(forceRarity || undefined);      // no hidden tricks: every chest follows the dice
     if (!isDemo) current = mutate(current, rollMutation());       // one chest in ten: the same card, mutated
     $('#chestUi').classList.add('hide');
     switches(false);
@@ -248,7 +248,7 @@ var ChestView = (function () {
     if (fg()) { Sfx.unlock(); Sfx.click(); Sfx.rattle(0.8 + RARITY[current.rarity].tier * 0.08); }
     clearTimeout(skipTimer);
     skipTimer = setTimeout(function () { if (busy && !revealShown) $('#skipHint').classList.add('on'); }, 900);
-    Chest3D.playOpen(current.rarity, { fast: quick(current) });
+    Chest3D.playOpen(current.rarity, { fast: quick(current), brisk: !special(current) });
   }
   function close() {
     revealSeq++; revealReady = false; cardFinish = null; clearTimeout(autoTimer); bar(0);
